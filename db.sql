@@ -7,7 +7,7 @@ CREATE TABLE `swaps` (
   `uuid` varchar(36) DEFAULT NULL,
   `time` timestamp NOT NULL DEFAULT current_timestamp(),
   `idena_tx` varchar(66) DEFAULT NULL,
-  `eth_tx` varchar(66) DEFAULT NULL,
+  `bsc_tx` varchar(66) DEFAULT NULL,
   `status` varchar(20) NOT NULL DEFAULT 'Pending',
   `type` int(1) NOT NULL DEFAULT 0,
   `mined` int(1) DEFAULT NULL,

@@ -51,7 +51,6 @@ async function setNonce() {
         }), "utf8")
         console.log("the idena local nonce has has been set");
     } catch (error) {
-        console.log(error);
         console.log("error while trying to set the idena local nonce");
     }
 }

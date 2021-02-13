@@ -20,15 +20,16 @@ exports.send = async function (address, amount) {
                 amount * 10 ** 18,
                 0.5 * 10 ** 18,
                 0 * 10 ** 18,
-                '0x'
+                Buffer.from("IDENA-TO-THE-MOON").toString('hex')
             );
+            console.log(tx.toHex())
             let apiResp = await axios.post(process.env.IDENA_PROVIDER, {
                 "method": "bcn_sendRawTx",
                 "id": 1,
                 "key": process.env.IDENA_API_KEY,
                 "params": [tx.sign(process.env.IDENA_PRIVATE_KEY).toHex()]
             })
-            console.log(apiResp.data);
+            console.log(apiResp);
             return apiResp.data.result || null;
         } else {
             return null
@@ -102,9 +103,9 @@ async function getEpoch() {
 }
 async function getNonce() {
     try {
-        if (fs.existsSync("./nonce.json")) {
-            let newNonce = JSON.parse(fs.readFileSync('./nonce.json')).nonce + 1;
-            fs.writeFileSync("./nonce.json", JSON.stringify({
+        if (fs.existsSync("./idena/nonce.json")) {
+            let newNonce = JSON.parse(fs.readFileSync('./idena/nonce.json')).nonce + 1;
+            fs.writeFileSync("./idena/nonce.json", JSON.stringify({
                 nonce: newNonce
             }), "utf8")
             return newNonce || null;

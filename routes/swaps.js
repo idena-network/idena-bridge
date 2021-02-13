@@ -2,7 +2,7 @@ const express = require('express'),
     router = express.Router();
 const uuid = require('uuid');
 const idena = require('../idena');
-const eth = require('../eth');
+const bsc = require('../bsc');
 const {
     utils
 } = require('ethers');
@@ -43,7 +43,7 @@ router.post('/assign', async function (req, res) {
         return
     }
     let conP = db.promise();
-    let sql = "SELECT `uuid`,`amount`,`address`,`type`,`idena_tx`,`eth_tx` FROM `swaps` WHERE `uuid` = ? LIMIT 1;";
+    let sql = "SELECT `uuid`,`amount`,`address`,`type`,`idena_tx`,`bsc_tx` FROM `swaps` WHERE `uuid` = ? LIMIT 1;";
     const [data] = await conP.execute(sql, [req.body.uuid]);
 
     if (data[0] && data[0].type == 0 && !(data[0].idena_tx) && ethers.utils.isHexString(req.body.tx) && req.body.tx.length == 66) {
@@ -67,10 +67,10 @@ router.post('/assign', async function (req, res) {
                 res.sendStatus(500);
             })
         }
-    } else if (data[0] && data[0].type == 1 && !(data[0].eth_tx) && ethers.utils.isHexString(req.body.tx) && req.body.tx.length == 66) {
-        if (await eth.isTxExist(req.body.tx)) {
-            if (await eth.isValidBurnTx(req.body.tx, data[0].address, data[0].amount) && await eth.isNewTx(req.body.tx)) {
-                sql = "UPDATE `swaps` SET `eth_tx` = ? WHERE `uuid` = ?;";
+    } else if (data[0] && data[0].type == 1 && !(data[0].bsc_tx) && ethers.utils.isHexString(req.body.tx) && req.body.tx.length == 66) {
+        if (await bsc.isTxExist(req.body.tx)) {
+            if (await bsc.isValidBurnTx(req.body.tx, data[0].address, data[0].amount) && await bsc.isNewTx(req.body.tx)) {
+                sql = "UPDATE `swaps` SET `bsc_tx` = ? WHERE `uuid` = ?;";
                 conP.query(sql, [req.body.tx, req.body.uuid]).then(() => {
                     res.sendStatus(200);
                 }).catch((err) => {
@@ -80,7 +80,7 @@ router.post('/assign', async function (req, res) {
                 res.sendStatus(400);
             }
         } else {
-            sql = "UPDATE `swaps` SET `eth_tx` = ? WHERE `uuid` = ?;";
+            sql = "UPDATE `swaps` SET `bsc_tx` = ? WHERE `uuid` = ?;";
             conP.query(sql, [req.body.tx, req.body.uuid]).then(() => {
                 res.sendStatus(200);
             }).catch((err) => {

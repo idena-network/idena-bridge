@@ -3,9 +3,8 @@ const express = require('express'),
     mysql = require('mysql2'),
     cors = require('cors'),
     bodyParser = require('body-parser'),
-    cron = require('node-cron'),
     idena = require('./idena'),
-    eth = require('./eth');
+    bsc = require('./bsc');
 
 db = mysql.createPool({
     host: process.env.DB_HOST,
@@ -15,7 +14,7 @@ db = mysql.createPool({
 });
 
 
-cron.schedule('*/5 * * * * *', async function () {
+async function checkSwaps() {
     let conP = db.promise();
     let sql = "SELECT * FROM `swaps` WHERE `status` = 'Pending';";
     const [data] = await conP.execute(sql);
@@ -30,10 +29,10 @@ cron.schedule('*/5 * * * * *', async function () {
                             let {
                                 hash,
                                 fees
-                            } = await eth.mint(swap.address, swap.amount);
+                            } = await bsc.mint(swap.address, swap.amount);
                             if (hash) {
-                                
-                                conP.execute("UPDATE `swaps` SET `status` = 'Success' ,`mined` = '1' ,`eth_tx` = ? ,`fees` = ? WHERE `uuid` = ?", [hash, fees, swap.uuid])
+
+                                conP.execute("UPDATE `swaps` SET `status` = 'Success' ,`mined` = '1' ,`bsc_tx` = ? ,`fees` = ? WHERE `uuid` = ?", [hash, fees, swap.uuid])
                             } else {
                                 conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`mined` = '1' ,`fail_reason` = 'Unkown' WHERE `uuid` = ?", [swap.uuid])
                             }
@@ -44,7 +43,7 @@ cron.schedule('*/5 * * * * *', async function () {
                     }
                 } else {
                     // not new or not valid
-                    conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`fail_reason` = 'NotValid' WHERE `uuid` = ?", [swap.uuid])
+                    conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`fail_reason` = 'Not Valid' WHERE `uuid` = ?", [swap.uuid])
                 }
             } else {
                 let date = Date.parse(swap.time);
@@ -53,9 +52,9 @@ cron.schedule('*/5 * * * * *', async function () {
                     conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`fail_reason` = 'Time' WHERE `uuid` = ?", [swap.uuid])
                 }
             }
-        } else if (swap.type == 1 && swap.eth_tx) {
-            if (await eth.isValidBurnTx(swap.eth_tx, swap.address, swap.amount) && await eth.isNewTx(swap.eth_tx)) {
-                 if (await eth.isTxConfirmed(swap.eth_tx)) {
+        } else if (swap.type == 1 && swap.bsc_tx) {
+            if (await bsc.isValidBurnTx(swap.bsc_tx, swap.address, swap.amount) && await bsc.isNewTx(swap.bsc_tx)) {
+                if (await bsc.isTxConfirmed(swap.bsc_tx)) {
                     // confirmed
                     let sendTx = await idena.send(swap.address, swap.amount);
                     if (sendTx) {
@@ -69,7 +68,7 @@ cron.schedule('*/5 * * * * *', async function () {
                 }
             } else {
                 // not new or not valid
-                conP.execute("UPDATE `swaps` SET `status` = 'Fail' , `mined` = '2' , `fail_reason` = 'NotValid' WHERE `uuid` = ?", [swap.uuid])
+                conP.execute("UPDATE `swaps` SET `status` = 'Fail' , `mined` = '2' , `fail_reason` = 'Not Valid' WHERE `uuid` = ?", [swap.uuid])
             }
         } else {
             let date = new Date(swap.time);
@@ -80,13 +79,13 @@ cron.schedule('*/5 * * * * *', async function () {
         }
     });
 
-});
-
+}
+checkSwaps();
 const swaps = require('./routes/swaps');
 app.use(cors())
 app.use(bodyParser.json());
 app.use('/swaps', swaps);
 
 
-var port = 8001;
+var port = 8000;
 app.listen(port, () => console.log(`Server started, listening on port: ${port}`));
