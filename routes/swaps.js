@@ -96,7 +96,7 @@ router.post('/assign', async function (req, res) {
 
 router.post('/create', function (req, res) {
     let type = parseInt(req.body.type);
-    let amount = Math.floor(parseFloat(req.body.amount) * 100) / 100;
+    let amount = parseFloat(req.body.amount).toFixed(8);
     if (!utils.isAddress(req.body.address) || ((type !== 0 && type !== 1)) || !(amount >= process.env.MIN_SWAP)) {
         res.sendStatus(400);
         return

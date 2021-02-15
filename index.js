@@ -13,12 +13,11 @@ db = mysql.createPool({
     database: process.env.DB_NAME
 });
 
-
 async function checkSwaps() {
     let conP = db.promise();
     let sql = "SELECT * FROM `swaps` WHERE `status` = 'Pending';";
     const [data] = await conP.execute(sql);
-    data.forEach(async swap => {
+    for (swap of data) {
         if (swap.type == 0 && swap.idena_tx) {
             if (await idena.isTxExist(swap.idena_tx)) {
                 if (await idena.isValidSendTx(swap.idena_tx, swap.address, swap.amount) && await idena.isNewTx(swap.idena_tx)) {
@@ -55,12 +54,19 @@ async function checkSwaps() {
         } else if (swap.type == 1 && swap.bsc_tx) {
             if (await bsc.isValidBurnTx(swap.bsc_tx, swap.address, swap.amount) && await bsc.isNewTx(swap.bsc_tx)) {
                 if (await bsc.isTxConfirmed(swap.bsc_tx)) {
+
                     // confirmed
-                    let sendTx = await idena.send(swap.address, swap.amount);
-                    if (sendTx) {
-                        conP.execute("UPDATE `swaps` SET `status` = 'Success' ,`mined` = '1' ,`idena_tx` = ? WHERE `uuid` = ?", [sendTx, swap.uuid])
-                    } else {
-                        conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`mined` = '1' ,`fail_reason` = 'Unkown' WHERE `uuid` = ?", [swap.uuid])
+                    const [data2] = await conP.execute("INSERT INTO `used_txs`(`blockchain`,`tx_hash`) VALUES ('bsc',?);", [swap.bsc_tx]);
+                    if (data2.insertId) {
+                        let {
+                            hash,
+                            fees
+                        } = await idena.send(swap.address, swap.amount);
+                        if (hash) {
+                            conP.execute("UPDATE `swaps` SET `status` = 'Success' ,`mined` = '1' ,`idena_tx` = ? , `fees` = ? WHERE `uuid` = ?", [hash, fees, swap.uuid])
+                        } else {
+                            conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`mined` = '1' ,`fail_reason` = 'Unkown' WHERE `uuid` = ?", [swap.uuid])
+                        }
                     }
                 } else {
                     // waiting to be confirmed
@@ -77,8 +83,8 @@ async function checkSwaps() {
                 conP.execute("UPDATE `swaps` SET `status` = 'Fail' , `mined` = '2' ,`fail_reason` = 'Time' WHERE `uuid` = ?", [swap.uuid])
             }
         }
-    });
-
+    }
+    setTimeout(checkSwaps, parseInt(process.env.CHECKING_DELAY));
 }
 checkSwaps();
 const swaps = require('./routes/swaps');

@@ -14,7 +14,7 @@ require('dotenv').config();
 
 exports.mint = async function (address, amount) {
     try {
-        amount = ethers.utils.parseEther((parseFloat(amount) - parseFloat(process.env.BSC_FEE)).toString());
+        amount = ethers.utils.parseEther((parseFloat(amount)).toString());
         const provider = new ethers.providers.JsonRpcProvider(process.env.BSC_RPC, parseInt(process.env.BSC_NETWORK));
         const signer = new ethers.Wallet(process.env.BSC_PRIVATE_KEY, provider);
         const contract = new ethers.Contract(
@@ -26,7 +26,7 @@ exports.mint = async function (address, amount) {
         if (idenaPrice == 0) {
             return null
         }
-        let fees = ethers.utils.parseUnits((await provider.getGasPrice() * await contract.estimateGas.mint(address, amount) / idenaPrice).toString(), 'ether')
+        let fees = ethers.utils.parseUnits((await provider.getGasPrice() * await contract.estimateGas.mint(address, amount) / idenaPrice).toString(), 'ether').div(ethers.BigNumber.from(100)).mul(ethers.BigNumber.from(process.env.BSC_FEES));
         return {
             hash: (await contract.mint(address, amount.sub(fees))).hash,
             fees: parseFloat(fees / 10 ** 18)

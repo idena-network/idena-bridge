@@ -11,7 +11,7 @@ exports.send = async function (address, amount) {
         let epoch = await getEpoch();
         let nonce = await getNonce();
         if (nonce !== null && epoch !== null) {
-            amount = parseFloat(amount) - process.env.IDENA_FEE
+            amount = parseFloat(amount) - parseFloat(process.env.IDENA_FIXED_FEES)
             const tx = await new Transaction(
                 nonce,
                 epoch,
@@ -22,15 +22,16 @@ exports.send = async function (address, amount) {
                 0 * 10 ** 18,
                 Buffer.from("IDENA-TO-THE-MOON").toString('hex')
             );
-            console.log(tx.toHex())
             let apiResp = await axios.post(process.env.IDENA_PROVIDER, {
                 "method": "bcn_sendRawTx",
                 "id": 1,
                 "key": process.env.IDENA_API_KEY,
                 "params": [tx.sign(process.env.IDENA_PRIVATE_KEY).toHex()]
             })
-            console.log(apiResp);
-            return apiResp.data.result || null;
+            return {
+                hash: apiResp.data.result,
+                fees: parseFloat(process.env.IDENA_FIXED_FEES)
+            } || null;
         } else {
             return null
         }
