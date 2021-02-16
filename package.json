@@ -13,14 +13,12 @@
     "js-sha3": "^0.8.0",
     "mysql2": "^2.2.5",
     "nconf": "^0.11.1",
-    "node-cron": "^2.0.3",
     "secp256k1": "^4.0.2",
     "uuid": "^8.3.2"
   },
   "devDependencies": {},
   "scripts": {
-    "start": "node index.js",
-    "clean": "node clean_db.js"
+    "start": "node index.js"
   },
   "keywords": [
     "idena",
