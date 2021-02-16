@@ -31,3 +31,15 @@ This can be skipped if u already setted the local nonce manually and also create
 
 To start the bridge backend execute this ```npm start```
 Notice : start only 1 instance and do not use pm2 ( because of the checker function)
+
+
+This bridge allows swapping from Idena blockchain to BSC and the opposite
+It Checks every specified time if there is a pending swaps and then it checks what happened to it's Tx
+see index.js > checkSwaps function
+
+Features list :
+1. local nonce for idena blockchain wallet
+2. Dynamic fees for Bsc Txs and preset fees for idena 
+3. Checking for most of the parameters that the user can send to the API
+4. Creating Txs locally instead of using an idena node rpc directly for sending
+5. Many more that are not written here :)
