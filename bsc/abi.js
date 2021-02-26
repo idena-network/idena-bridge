@@ -49,12 +49,19 @@ module.exports = [{
         "type": "function"
     },
     {
-        "inputs": [{
-            "internalType": "uint256",
-            "name": "amount",
-            "type": "uint256"
-        }],
-        "name": "burn",
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "amount",
+                "type": "uint256"
+            },
+            {
+                "internalType": "address",
+                "name": "destination",
+                "type": "address"
+            }
+        ],
+        "name": "customBurn",
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"

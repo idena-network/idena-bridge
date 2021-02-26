@@ -33,7 +33,7 @@ async function checkSwaps() {
 
                                 conP.execute("UPDATE `swaps` SET `status` = 'Success' ,`mined` = '1' ,`bsc_tx` = ? ,`fees` = ? WHERE `uuid` = ?", [hash, fees, swap.uuid])
                             } else {
-                                conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`mined` = '1' ,`fail_reason` = 'Unkown' WHERE `uuid` = ?", [swap.uuid])
+                                conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`mined` = '1' ,`fail_reason` = 'Unknown' WHERE `uuid` = ?", [swap.uuid])
                             }
                         }
                     } else {
@@ -60,12 +60,14 @@ async function checkSwaps() {
                     if (data2.insertId) {
                         let {
                             hash,
-                            fees
+                            fees,
+                            errorMessage
                         } = await idena.send(swap.address, swap.amount);
                         if (hash) {
                             conP.execute("UPDATE `swaps` SET `status` = 'Success' ,`mined` = '1' ,`idena_tx` = ? , `fees` = ? WHERE `uuid` = ?", [hash, fees, swap.uuid])
                         } else {
-                            conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`mined` = '1' ,`fail_reason` = 'Unkown' WHERE `uuid` = ?", [swap.uuid])
+                            const reason = errorMessage ? errorMessage : 'Unknown'
+                            conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`mined` = '1' ,`fail_reason` = ? WHERE `uuid` = ?", [reason, swap.uuid])
                         }
                     }
                 } else {

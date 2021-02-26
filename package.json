@@ -7,6 +7,7 @@
     "axios": "^0.21.1",
     "cors": "^2.8.5",
     "dotenv": "^8.2.0",
+    "ethereum-input-data-decoder": "^0.3.1",
     "ethers": "^5.0.26",
     "express": "^4.17.1",
     "google-protobuf": "^3.14.0",

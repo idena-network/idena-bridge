@@ -1,14 +1,9 @@
 const {
     default: axios
 } = require('axios');
-const {
-    ethers
-} = require('ethers'),
-    fs = require('fs');
-const {
-    METHODS
-} = require('http');
+const ethers = require('ethers');
 const abi = require('./abi.js');
+const InputDataDecoder = require('ethereum-input-data-decoder');
 require('dotenv').config();
 
 
@@ -37,40 +32,66 @@ exports.mint = async function (address, amount) {
     }
 
 }
+
 exports.isValidBurnTx = async function (txHash, address, amount) {
+    function extractDestAddress(inputData) {
+        try {
+            if (!inputData) {
+                return false
+            }
+            const inputDataDecoder = new InputDataDecoder(abi)
+            const result = inputDataDecoder.decodeData(inputData)
+            if (!result || !result.inputs || result.inputs.length < 2) {
+                return false
+            }
+            return result.inputs[1]
+        } catch (error) {
+            return false
+        }
+    }
+
     try {
         const provider = new ethers.providers.JsonRpcProvider(process.env.BSC_RPC, parseInt(process.env.BSC_NETWORK));
         const contract = new ethers.Contract(
             process.env.BSC_CONTRACT,
             abi
         );
-        let tx = await provider.getTransactionReceipt(txHash);
-        if (tx.status !== 1) {
+
+        let txReceipt = await provider.getTransactionReceipt(txHash);
+
+        if (txReceipt.status !== 1) {
             return false
-        } else if (tx.logs.length == 0) {
-            return false
-        } else if (tx.from.toLowerCase() !== address.toLowerCase()) {
-            return false
-        } else if (tx.to.toLowerCase() !== process.env.BSC_CONTRACT.toLowerCase()) {
-            return false
-        } else if (contract.interface.parseLog(tx.logs[0]).name !== "Transfer") {
-            return false
-        } else if (!(contract.interface.parseLog(tx.logs[0]).args.value >= ethers.utils.parseEther(amount.toString()))) {
-            return false
-        } else if (contract.interface.parseLog(tx.logs[0]).args.from.toLowerCase() !== address.toLowerCase()) {
-            return false
-        } else if (contract.interface.parseLog(tx.logs[0]).args.to.toLowerCase() !== "0x0000000000000000000000000000000000000000") {
-            return false
-        } else {
-            return true
         }
+        if (txReceipt.logs.length === 0) {
+            return false
+        }
+        if (txReceipt.to.toLowerCase() !== process.env.BSC_CONTRACT.toLowerCase()) {
+            return false
+        }
+        let tx = await provider.getTransaction(txHash)
+        let destAddress = tx && extractDestAddress(tx.data)
+        if (destAddress.toLowerCase() !== address.toLowerCase().slice(2)) {
+            return false
+        }
+        if (contract.interface.parseLog(txReceipt.logs[0]).name !== "Transfer") {
+            return false
+        }
+        if (!(contract.interface.parseLog(txReceipt.logs[0]).args.value >= ethers.utils.parseEther(amount.toString()))) {
+            return false
+        }
+        if (contract.interface.parseLog(txReceipt.logs[0]).args.from.toLowerCase() !== tx.from.toLowerCase()) {
+            return false
+        }
+        if (contract.interface.parseLog(txReceipt.logs[0]).args.to.toLowerCase() !== "0x0000000000000000000000000000000000000000") {
+            return false
+        }
+        return true
     } catch (error) {
         console.log(error);
         return false
     }
-
-
 }
+
 exports.isTxExist = async function (txHash) {
     try {
         const provider = new ethers.providers.JsonRpcProvider(process.env.BSC_RPC, parseInt(process.env.BSC_NETWORK));

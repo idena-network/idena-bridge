@@ -30,7 +30,8 @@ exports.send = async function (address, amount) {
             })
             return {
                 hash: apiResp.data.result,
-                fees: parseFloat(process.env.IDENA_FIXED_FEES)
+                fees: parseFloat(process.env.IDENA_FIXED_FEES),
+                errorMessage: apiResp.data.error && apiResp.data.error.message
             } || null;
         } else {
             return null
@@ -42,6 +43,7 @@ exports.send = async function (address, amount) {
     }
 
 }
+
 async function getTransaction(tx) {
     try {
         let transaction = await axios.post(process.env.IDENA_PROVIDER, {
@@ -56,6 +58,7 @@ async function getTransaction(tx) {
         return null
     }
 }
+
 exports.isTxConfirmed = async function (tx) {
     try {
         let transaction = await axios.post(process.env.IDENA_PROVIDER, {
@@ -100,8 +103,8 @@ async function getEpoch() {
     } catch (error) {
         return null
     }
-
 }
+
 async function getNonce() {
     try {
         if (fs.existsSync("./idena/nonce.json")) {
@@ -120,23 +123,37 @@ async function getNonce() {
 }
 
 exports.isValidSendTx = async function (txHash, address, amount) {
-    try {
-        let transaction = await getTransaction(txHash);
-        if (transaction) {
-            if (transaction.to !== privateKeyToAddress(process.env.IDENA_PRIVATE_KEY)) {
+    function extractDestAddress(payload) {
+        try {
+            const comment = Buffer.from(payload.substring(2), 'hex').toString()
+            const prefix = "BSCADDRESS"
+            if (comment.indexOf(prefix) !== 0) {
                 return false
-            } else if (!(parseFloat(transaction.amount) >= parseFloat(amount))) {
-                return false
-            } else if (transaction.type !== "send") {
-                return false
-            } else if (transaction.from.toLowerCase() !== address.toLowerCase()) {
-                return false
-            } else {
-                return true
             }
-        } else {
+            return comment.substring(prefix.length)
+        } catch (error) {
             return false
         }
+    }
+    try {
+        let transaction = await getTransaction(txHash);
+        if (!transaction) {
+            return false
+        }
+        const destAddress = extractDestAddress(transaction.payload)
+        if (!destAddress || destAddress.toLowerCase() !== address.toLowerCase()) {
+            return false
+        }
+        if (transaction.to !== privateKeyToAddress(process.env.IDENA_PRIVATE_KEY)) {
+            return false
+        }
+        if (!(parseFloat(transaction.amount) >= parseFloat(amount))) {
+            return false
+        }
+        if (transaction.type !== "send") {
+            return false
+        }
+        return true
     } catch (error) {
         console.log(error);
         return false
