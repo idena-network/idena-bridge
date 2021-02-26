@@ -96,8 +96,8 @@ router.post('/assign', async function (req, res) {
 
 router.post('/create', function (req, res) {
     let type = parseInt(req.body.type);
-    let amount = parseFloat(req.body.amount).toFixed(8);
-    if (!utils.isAddress(req.body.address) || ((type !== 0 && type !== 1)) || !(amount >= process.env.MIN_SWAP)) {
+    let amount = parseFloat(req.body.amount);
+    if (!utils.isAddress(req.body.address) || (type !== 0 && type !== 1) || !(amount >= process.env.MIN_SWAP)) {
         res.sendStatus(400);
         return
     }
@@ -105,7 +105,7 @@ router.post('/create', function (req, res) {
     let sql = "INSERT INTO `swaps`(`uuid`,`amount`,`address`,`type`) VALUES (?,?,?,?)";
     let values = [
         newUUID,
-        amount,
+        amount.toFixed(8),
         req.body.address,
         type
     ];
