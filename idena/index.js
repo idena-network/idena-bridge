@@ -54,7 +54,7 @@ async function getTransaction(tx) {
         });
         return transaction.data.result || null
     } catch (error) {
-        console.log(error);
+        console.error("Failed to get idena transaction:", error);
         return null
     }
 }
