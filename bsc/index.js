@@ -87,7 +87,7 @@ exports.isValidBurnTx = async function (txHash, address, amount) {
         }
         return true
     } catch (error) {
-        console.log(error);
+        console.log("Failed to check if burn tx is valid", error);
         return false
     }
 }

@@ -1,7 +1,7 @@
 const {
-    Transaction,
-    privateKeyToAddress
-} = require('./script.js'),
+        Transaction,
+        privateKeyToAddress
+    } = require('./script.js'),
     axios = require("axios"),
     fs = require('fs');
 require('dotenv').config();
@@ -9,7 +9,7 @@ require('dotenv').config();
 exports.send = async function (address, amount) {
     try {
         let epoch = await getEpoch();
-        let nonce = await getNonce();
+        let nonce = await getNonce(epoch);
         if (nonce !== null && epoch !== null) {
             amount = parseFloat(amount) - parseFloat(process.env.IDENA_FIXED_FEES)
             const tx = await new Transaction(
@@ -105,12 +105,19 @@ async function getEpoch() {
     }
 }
 
-async function getNonce() {
+async function getNonce(epoch) {
     try {
         if (fs.existsSync("./idena/nonce.json")) {
-            let newNonce = JSON.parse(fs.readFileSync('./idena/nonce.json')).nonce + 1;
+            const current = JSON.parse(fs.readFileSync('./idena/nonce.json'))
+            let newEpoch = current.epoch
+            let newNonce = current.nonce + 1;
+            if (epoch > newEpoch) {
+                newEpoch = epoch
+                newNonce = 1
+            }
             fs.writeFileSync("./idena/nonce.json", JSON.stringify({
-                nonce: newNonce
+                nonce: newNonce,
+                epoch: newEpoch
             }), "utf8")
             return newNonce || null;
         } else {
@@ -135,6 +142,7 @@ exports.isValidSendTx = async function (txHash, address, amount) {
             return false
         }
     }
+
     try {
         let transaction = await getTransaction(txHash);
         if (!transaction) {
