@@ -33,7 +33,7 @@ exports.mint = async function (address, amount) {
 
 }
 
-exports.isValidBurnTx = async function (txHash, address, amount) {
+exports.isValidBurnTx = async function (txHash, address, amount, date) {
     function extractDestAddress(inputData) {
         try {
             if (!inputData) {
@@ -83,6 +83,11 @@ exports.isValidBurnTx = async function (txHash, address, amount) {
             return false
         }
         if (contract.interface.parseLog(txReceipt.logs[0]).args.to.toLowerCase() !== "0x0000000000000000000000000000000000000000") {
+            return false
+        }
+        const block = await provider.getBlock(tx.blockHash)
+        const blockDate = new Date(block.timestamp * 1000);
+        if (blockDate.getTime() < date.getTime()) {
             return false
         }
         return true

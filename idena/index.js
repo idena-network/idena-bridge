@@ -61,34 +61,44 @@ async function getTransaction(tx) {
 
 exports.isTxConfirmed = async function (tx) {
     try {
-        let transaction = await axios.post(process.env.IDENA_PROVIDER, {
-            "method": "bcn_transaction",
+        let transaction = await getTransaction(tx);
+        if (!transaction.timestamp) {
+            return false
+        }
+        let bcn_block = await axios.post(process.env.IDENA_PROVIDER, {
+            "method": "bcn_block",
             "id": 1,
             "key": process.env.IDENA_API_KEY,
-            "params": [tx]
+            "params": [transaction.blockHash]
+        })
+        let bcn_syncing = await axios.post(process.env.IDENA_PROVIDER, {
+            "method": "bcn_syncing",
+            "id": 1,
+            "key": process.env.IDENA_API_KEY,
+            "params": []
         });
-        if (transaction.data.result.timestamp) {
-            let bcn_block = await axios.post(process.env.IDENA_PROVIDER, {
-                "method": "bcn_block",
-                "id": 1,
-                "key": process.env.IDENA_API_KEY,
-                "params": [transaction.data.result.blockHash]
-            });
-            let bcn_syncing = await axios.post(process.env.IDENA_PROVIDER, {
-                "method": "bcn_syncing",
-                "id": 1,
-                "key": process.env.IDENA_API_KEY,
-                "params": []
-            });
-            return bcn_syncing.data.result.highestBlock > bcn_block.data.result.height + parseInt(process.env.IDENA_CONFIRMATIONS_BLOCKS) || false
-        } else {
-            return false;
-        }
+        return bcn_syncing.data.result.highestBlock > bcn_block.data.result.height + parseInt(process.env.IDENA_CONFIRMATIONS_BLOCKS) || false
     } catch (error) {
         console.log(error);
         return false
     }
+}
 
+exports.isTxActual = async function (txHash, date) {
+    try {
+        const transaction = await getTransaction(txHash);
+        return await isTxActual(transaction, date)
+    } catch (error) {
+        return false
+    }
+}
+
+async function isTxActual(tx, date) {
+    try {
+        return new Date(tx.timestamp * 1000).getTime() >= date.getTime()
+    } catch (error) {
+        return false
+    }
 }
 
 async function getEpoch() {
@@ -129,7 +139,7 @@ async function getNonce(epoch) {
     }
 }
 
-exports.isValidSendTx = async function (txHash, address, amount) {
+exports.isValidSendTx = async function (txHash, address, amount, date) {
     function extractDestAddress(payload) {
         try {
             const comment = Buffer.from(payload.substring(2), 'hex').toString()
@@ -159,6 +169,9 @@ exports.isValidSendTx = async function (txHash, address, amount) {
             return false
         }
         if (transaction.type !== "send") {
+            return false
+        }
+        if (transaction.timestamp && !await isTxActual(transaction, date)) {
             return false
         }
         return true

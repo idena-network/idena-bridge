@@ -10,14 +10,20 @@ db = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USERNAME,
     password: process.env.DB_PASS,
-    database: process.env.DB_NAME
+    database: process.env.DB_NAME,
+    timezone: 'UTC'
 });
 
 async function checkSwap(swap, conP) {
     if (swap.type === 0 && swap.idena_tx) {
         if (await idena.isTxExist(swap.idena_tx)) {
-            if (await idena.isValidSendTx(swap.idena_tx, swap.address, swap.amount) && await idena.isNewTx(swap.idena_tx)) {
+            if (await idena.isValidSendTx(swap.idena_tx, swap.address, swap.amount, swap.time) && await idena.isNewTx(swap.idena_tx)) {
                 if (await idena.isTxConfirmed(swap.idena_tx)) {
+                    if (!await idena.isTxActual(swap.idena_tx, swap.time)) {
+                        // not valid (not actual)
+                        await conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`fail_reason` = 'Not Valid' WHERE `uuid` = ?", [swap.uuid])
+                        return
+                    }
                     // confirmed
                     const [data2] = await conP.execute("INSERT INTO `used_txs`(`blockchain`,`tx_hash`) VALUES ('idena',?);", [swap.idena_tx]);
                     if (!data2.insertId) {
@@ -50,7 +56,7 @@ async function checkSwap(swap, conP) {
         return
     }
     if (swap.type === 1 && swap.bsc_tx) {
-        if (await bsc.isValidBurnTx(swap.bsc_tx, swap.address, swap.amount) && await bsc.isNewTx(swap.bsc_tx)) {
+        if (await bsc.isValidBurnTx(swap.bsc_tx, swap.address, swap.amount, swap.time) && await bsc.isNewTx(swap.bsc_tx)) {
             if (await bsc.isTxConfirmed(swap.bsc_tx)) {
                 // confirmed
                 const [data2] = await conP.execute("INSERT INTO `used_txs`(`blockchain`,`tx_hash`) VALUES ('bsc',?);", [swap.bsc_tx]);

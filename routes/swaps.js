@@ -57,7 +57,7 @@ router.post('/assign', async function (req, res) {
         res.sendStatus(500);
     }
     let conP = db.promise();
-    let sql = "SELECT `uuid`,`amount`,`address`,`type`,`idena_tx`,`bsc_tx` FROM `swaps` WHERE `uuid` = ? LIMIT 1;";
+    let sql = "SELECT `uuid`,`amount`,`address`,`type`,`idena_tx`,`bsc_tx`, `time` FROM `swaps` WHERE `uuid` = ? LIMIT 1;";
     let data
     try {
         [data] = await conP.execute(sql, [req.body.uuid]);
@@ -68,7 +68,7 @@ router.post('/assign', async function (req, res) {
 
     if (data[0] && data[0].type === 0 && !(data[0].idena_tx) && ethers.utils.isHexString(req.body.tx) && req.body.tx.length === 66) {
         if (await idena.isTxExist(req.body.tx)) {
-            if (await idena.isValidSendTx(req.body.tx, data[0].address, data[0].amount) && await idena.isNewTx(req.body.tx)) {
+            if (await idena.isValidSendTx(req.body.tx, data[0].address, data[0].amount, data[0].time) && await idena.isNewTx(req.body.tx)) {
                 sql = "UPDATE `swaps` SET `idena_tx` = ? WHERE `uuid` = ? ;";
                 conP.execute(sql, [req.body.tx, req.body.uuid]).then(() => {
                     res.sendStatus(200);
@@ -86,7 +86,7 @@ router.post('/assign', async function (req, res) {
     }
     if (data[0] && data[0].type === 1 && !(data[0].bsc_tx) && ethers.utils.isHexString(req.body.tx) && req.body.tx.length === 66) {
         if (await bsc.isTxExist(req.body.tx)) {
-            if (await bsc.isValidBurnTx(req.body.tx, data[0].address, data[0].amount) && await bsc.isNewTx(req.body.tx)) {
+            if (await bsc.isValidBurnTx(req.body.tx, data[0].address, data[0].amount, data[0].time) && await bsc.isNewTx(req.body.tx)) {
                 sql = "UPDATE `swaps` SET `bsc_tx` = ? WHERE `uuid` = ?;";
                 conP.query(sql, [req.body.tx, req.body.uuid]).then(() => {
                     res.sendStatus(200);
