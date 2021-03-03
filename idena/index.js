@@ -5,12 +5,14 @@ const {
     axios = require("axios"),
     fs = require('fs');
 require('dotenv').config();
+const logger = require('../logger').child({component: "idena"})
 
 exports.send = async function (address, amount) {
     try {
         let epoch = await getEpoch();
         let nonce = await getNonce(epoch);
         if (nonce !== null && epoch !== null) {
+            logger.info(`Sending idena tx, address: ${address}, amount: ${amount}, epoch: ${epoch}, nonce: ${nonce}`)
             amount = parseFloat(amount) - parseFloat(process.env.IDENA_FIXED_FEES)
             const tx = await new Transaction(
                 nonce,
@@ -38,7 +40,7 @@ exports.send = async function (address, amount) {
         }
 
     } catch (error) {
-        console.log(error);
+        logger.error(`Failed to send tx: ${error}`);
         return null
     }
 
@@ -54,7 +56,7 @@ async function getTransaction(tx) {
         });
         return transaction.data.result || null
     } catch (error) {
-        console.error("Failed to get idena transaction:", error);
+        logger.error(`Failed to get tx: ${error}`);
         return null
     }
 }
@@ -79,7 +81,7 @@ exports.isTxConfirmed = async function (tx) {
         });
         return bcn_syncing.data.result.highestBlock > bcn_block.data.result.height + parseInt(process.env.IDENA_CONFIRMATIONS_BLOCKS) || false
     } catch (error) {
-        console.log(error);
+        logger.error(`Failed to check if tx is confirmed: ${error}`);
         return false
     }
 }
@@ -89,6 +91,7 @@ exports.isTxActual = async function (txHash, date) {
         const transaction = await getTransaction(txHash);
         return await isTxActual(transaction, date)
     } catch (error) {
+        logger.error(`Failed to check if tx is actual: ${error}`);
         return false
     }
 }
@@ -97,6 +100,7 @@ async function isTxActual(tx, date) {
     try {
         return new Date(tx.timestamp * 1000).getTime() >= date.getTime()
     } catch (error) {
+        logger.error(`Failed to check if tx is actual: ${error}`);
         return false
     }
 }
@@ -111,6 +115,7 @@ async function getEpoch() {
         })
         return apiResp.data.result.epoch;
     } catch (error) {
+        logger.error(`Failed to get epoch: ${error}`);
         return null
     }
 }
@@ -134,7 +139,7 @@ async function getNonce(epoch) {
             return null
         }
     } catch (error) {
-        console.log(error);
+        logger.error(`Failed to get nonce: ${error}`);
         return null
     }
 }
@@ -149,6 +154,7 @@ exports.isValidSendTx = async function (txHash, address, amount, date) {
             }
             return comment.substring(prefix.length)
         } catch (error) {
+            logger.error(`Failed to extract dest address: ${error}`);
             return false
         }
     }
@@ -156,27 +162,34 @@ exports.isValidSendTx = async function (txHash, address, amount, date) {
     try {
         let transaction = await getTransaction(txHash);
         if (!transaction) {
+            logger.info("No tx");
             return false
         }
         const destAddress = extractDestAddress(transaction.payload)
         if (!destAddress || destAddress.toLowerCase() !== address.toLowerCase()) {
+            logger.info(`Wrong dest address, actual: ${destAddress}, expected: ${address}`);
             return false
         }
-        if (transaction.to !== privateKeyToAddress(process.env.IDENA_PRIVATE_KEY)) {
+        const recipient = privateKeyToAddress(process.env.IDENA_PRIVATE_KEY)
+        if (transaction.to !== recipient) {
+            logger.info(`Wrong tx recipient, actual: ${transaction.to}, expected: ${recipient}`);
             return false
         }
         if (!(parseFloat(transaction.amount) >= parseFloat(amount))) {
+            logger.info(`Wrong tx amount, actual: ${transaction.amount}, expected: at least ${amount}`);
             return false
         }
         if (transaction.type !== "send") {
+            logger.info(`Wrong tx type, actual: ${transaction.type}, expected: send`);
             return false
         }
         if (transaction.timestamp && !await isTxActual(transaction, date)) {
+            logger.info("Tx is not actual");
             return false
         }
         return true
     } catch (error) {
-        console.log(error);
+        logger.error(`Failed to check if idena tx is valid: ${error}`);
         return false
     }
 }
@@ -190,7 +203,7 @@ exports.isTxExist = async function (txHash) {
             return false
         }
     } catch (error) {
-        console.log(error);
+        logger.error(`Failed to check if tx exists: ${error}`);
         return false
     }
 }
@@ -198,6 +211,7 @@ exports.isTxExist = async function (txHash) {
 exports.getWalletAddress = function () {
     return privateKeyToAddress(process.env.IDENA_PRIVATE_KEY);
 }
+
 exports.isNewTx = async function (tx) {
     try {
         const [data] = await db.promise().execute("SELECT `id` FROM `used_txs` WHERE `tx_hash` = ? AND `blockchain` = 'idena';", [tx]);
@@ -207,7 +221,7 @@ exports.isNewTx = async function (tx) {
             return true
         }
     } catch (error) {
+        logger.error(`Failed to check if tx is new: ${error}`);
         return false
     }
-
 }
