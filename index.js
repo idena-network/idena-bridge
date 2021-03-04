@@ -159,13 +159,16 @@ async function loopCheckSwaps() {
     setTimeout(loopCheckSwaps, parseInt(process.env.CHECKING_DELAY));
 }
 
-loopCheckSwaps();
-
 const swaps = require('./routes/swaps');
 app.use(cors())
 app.use(bodyParser.json());
 app.use('/swaps', swaps);
 
+async function start() {
+    await idena.initNonce()
+    loopCheckSwaps();
+    const port = 8000;
+    app.listen(port, () => logger.info(`Server started, listening on port: ${port}`));
+}
 
-var port = 8000;
-app.listen(port, () => logger.info(`Server started, listening on port: ${port}`));
+start()

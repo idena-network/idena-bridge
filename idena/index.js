@@ -3,9 +3,54 @@ const {
         privateKeyToAddress
     } = require('./script.js'),
     axios = require("axios"),
-    fs = require('fs');
+    fs = require('fs'),
+    path = require('path');
 require('dotenv').config();
 const logger = require('../logger').child({component: "idena"})
+
+const nonceDir = process.env.NONCE_DIR
+const nonceFile = path.join(nonceDir || '', 'nonce.json')
+
+async function setNonce() {
+    try {
+        const apiEpochResp = await axios.post(process.env.IDENA_PROVIDER, {
+            "method": "dna_epoch",
+            "id": 1,
+            "key": process.env.IDENA_API_KEY,
+            "params": []
+        })
+        let apiBalanceResp = await axios.post(process.env.IDENA_PROVIDER, {
+            "method": "dna_getBalance",
+            "id": 1,
+            "key": process.env.IDENA_API_KEY,
+            "params": [privateKeyToAddress(process.env.IDENA_PRIVATE_KEY)]
+        })
+        fs.writeFileSync(nonceFile, JSON.stringify({
+            nonce: apiBalanceResp.data.result.nonce,
+            epoch: apiEpochResp.data.result.epoch
+        }), "utf8")
+        const msg = "The idena local nonce has has been set"
+        logger.info(msg);
+        console.log(msg)
+    } catch (error) {
+        const msg = `Error while trying to set the idena local nonce: ${error}`
+        logger.error(msg);
+        console.error(msg)
+        throw error
+    }
+}
+
+exports.initNonce = async function () {
+    if (nonceDir && !fs.existsSync(nonceDir)) {
+        fs.mkdirSync(nonceDir, {recursive: true});
+        const msg = `Directory for nonce file created: ${nonceDir}`
+        logger.info(msg)
+        console.log(msg)
+    }
+    if (!fs.existsSync(nonceFile)) {
+        await setNonce()
+    }
+}
 
 exports.send = async function (address, amount) {
     try {
@@ -122,15 +167,15 @@ async function getEpoch() {
 
 async function getNonce(epoch) {
     try {
-        if (fs.existsSync("./idena/nonce.json")) {
-            const current = JSON.parse(fs.readFileSync('./idena/nonce.json'))
+        if (fs.existsSync(nonceFile)) {
+            const current = JSON.parse(fs.readFileSync(nonceFile))
             let newEpoch = current.epoch
             let newNonce = current.nonce + 1;
             if (epoch > newEpoch) {
                 newEpoch = epoch
                 newNonce = 1
             }
-            fs.writeFileSync("./idena/nonce.json", JSON.stringify({
+            fs.writeFileSync(nonceFile, JSON.stringify({
                 nonce: newNonce,
                 epoch: newEpoch
             }), "utf8")

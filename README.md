@@ -25,9 +25,9 @@ DB_USERNAME=""
 ```
 
 Then execute ```node install.js```
-This will create or edit the idena/nonce.json file and add the current nonce of idena wallet and will also recreate the db table
+This will recreate the db table
 
-This can be skipped if u already setted the local nonce manually and also created the db table 
+This can be skipped if u already created the db table 
 
 To start the bridge backend execute this ```npm start```
 Notice : start only 1 instance and do not use pm2 ( because of the checker function)
