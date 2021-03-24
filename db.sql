@@ -12,7 +12,9 @@ CREATE TABLE `swaps` (
   `type` int(1) NOT NULL DEFAULT 0,
   `mined` int(1) DEFAULT NULL,
   `fail_reason` varchar(255) DEFAULT NULL,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY `uuid` (`uuid`) USING BTREE,
+  KEY `time` (`time`)
 );
 DROP TABLE IF EXISTS `used_txs`;
 CREATE TABLE `used_txs` (
