@@ -75,25 +75,21 @@ async function info(req, res) {
         });
 }
 
-router.get('/assign', async function (req, res) {
+router.post('/assign', async function (req, res) {
     try {
         await assign(req, res)
     } catch (error) {
-        logger.error(`Failed ${req.path} (uuid=${req.query.uuid}): ${error}`)
+        logger.error(`Failed ${req.path} (uuid=${req.params.uuid}): ${error}`)
         res.sendStatus(500)
     }
 });
 
 async function assign(req, res) {
-    const reqInfo = `${req.path} (uuid=${req.query.uuid}, tx=${req.query.tx})`
+    const reqInfo = `${req.path} (uuid=${req.params.uuid}, tx=${req.params.tx})`
     logger.debug(`Got ${reqInfo}`)
-    if (!uuid.validate(req.query.uuid)) {
+    if (!uuid.validate(req.params.uuid)) {
         logger.debug(`Bad request ${reqInfo}`)
-        if (req.query.no_redirect) {
-            res.sendStatus(400);
-        } else {
-            res.redirect(`/operation/${req.query.uuid}`);
-        }
+        res.sendStatus(400);
         return
     }
 
@@ -106,24 +102,20 @@ async function assign(req, res) {
     let sql = "SELECT `uuid`,`amount`,`address`,`type`,`idena_tx`,`bsc_tx`, `time` FROM `swaps` WHERE `uuid` = ? LIMIT 1;";
     let data
     try {
-        [data] = await conP.execute(sql, [req.query.uuid]);
+        [data] = await conP.execute(sql, [req.params.uuid]);
     } catch (err) {
         reject(err)
         return
     }
 
-    if (data[0] && data[0].type === 0 && !(data[0].idena_tx) && ethers.utils.isHexString(req.query.tx) && req.query.tx.length === 66) {
+    if (data[0] && data[0].type === 0 && !(data[0].idena_tx) && ethers.utils.isHexString(req.params.tx) && req.params.tx.length === 66) {
 
-        if (await idena.isTxExist(req.query.tx)) {
-            if (await idena.isValidSendTx(req.query.tx, data[0].address, data[0].amount, data[0].time) && await idena.isNewTx(req.query.tx)) {
+        if (await idena.isTxExist(req.params.tx)) {
+            if (await idena.isValidSendTx(req.params.tx, data[0].address, data[0].amount, data[0].time) && await idena.isNewTx(req.params.tx)) {
                 sql = "UPDATE `swaps` SET `idena_tx` = ? WHERE `uuid` = ? ;";
-                conP.execute(sql, [req.query.tx, req.query.uuid]).then(() => {
+                conP.execute(sql, [req.params.tx, req.params.uuid]).then(() => {
                     logger.debug(`Completed ${reqInfo}`)
-                    if (req.query.no_redirect) {
-                        res.sendStatus(200);
-                    } else {
-                        res.redirect(`/operation/${req.query.uuid}`);
-                    }
+                    res.sendStatus(200);
                 }).catch(reject)
                 return
             }
@@ -133,27 +125,19 @@ async function assign(req, res) {
         }
 
         sql = "UPDATE `swaps` SET `idena_tx` = ? WHERE `uuid` = ?;";
-        conP.query(sql, [req.query.tx, req.query.uuid]).then(() => {
+        conP.query(sql, [req.params.tx, req.params.uuid]).then(() => {
             logger.debug(`Completed ${reqInfo}`)
-            if (req.query.no_redirect) {
-                res.sendStatus(200);
-            } else {
-                res.redirect(`/operation/${req.query.uuid}`);
-            }
+            res.sendStatus(200);
         }).catch(reject)
         return
     }
-    if (data[0] && data[0].type === 1 && !(data[0].bsc_tx) && ethers.utils.isHexString(req.query.tx) && req.query.tx.length === 66) {
-        if (await bsc.isTxExist(req.query.tx)) {
-            if (await bsc.isValidBurnTx(req.query.tx, data[0].address, data[0].amount, data[0].time) && await bsc.isNewTx(req.query.tx)) {
+    if (data[0] && data[0].type === 1 && !(data[0].bsc_tx) && ethers.utils.isHexString(req.params.tx) && req.params.tx.length === 66) {
+        if (await bsc.isTxExist(req.params.tx)) {
+            if (await bsc.isValidBurnTx(req.params.tx, data[0].address, data[0].amount, data[0].time) && await bsc.isNewTx(req.params.tx)) {
                 sql = "UPDATE `swaps` SET `bsc_tx` = ? WHERE `uuid` = ?;";
-                conP.query(sql, [req.query.tx, req.query.uuid]).then(() => {
+                conP.query(sql, [req.params.tx, req.params.uuid]).then(() => {
                     logger.debug(`Completed ${reqInfo}`)
-                    if (req.query.no_redirect) {
-                        res.sendStatus(200);
-                    } else {
-                        res.redirect(`/operation/${req.query.uuid}`);
-                    }
+                    res.sendStatus(200);
                 }).catch(reject)
                 return
             }
@@ -162,13 +146,9 @@ async function assign(req, res) {
             return
         }
         sql = "UPDATE `swaps` SET `bsc_tx` = ? WHERE `uuid` = ?;";
-        conP.query(sql, [req.query.tx, req.query.uuid]).then(() => {
+        conP.query(sql, [req.params.tx, req.params.uuid]).then(() => {
             logger.debug(`Completed ${reqInfo}`)
-            if (req.query.no_redirect) {
-                res.sendStatus(200);
-            } else {
-                res.redirect(`/operation/${req.query.uuid}`);
-            }
+            res.sendStatus(200);
         }).catch(reject)
         return
     }
