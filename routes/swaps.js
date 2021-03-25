@@ -9,7 +9,9 @@ const {
 const {
     ethers
 } = require('ethers');
-const logger = require('../logger').child({component: "api"})
+const logger = require('../logger').child({
+    component: "api"
+})
 
 router.get('/latest', async function (req, res) {
     try {
@@ -107,6 +109,7 @@ async function assign(req, res) {
     }
 
     if (data[0] && data[0].type === 0 && !(data[0].idena_tx) && ethers.utils.isHexString(req.body.tx) && req.body.tx.length === 66) {
+
         if (await idena.isTxExist(req.body.tx)) {
             if (await idena.isValidSendTx(req.body.tx, data[0].address, data[0].amount, data[0].time) && await idena.isNewTx(req.body.tx)) {
                 sql = "UPDATE `swaps` SET `idena_tx` = ? WHERE `uuid` = ? ;";
@@ -120,6 +123,7 @@ async function assign(req, res) {
             res.sendStatus(400);
             return
         }
+
         sql = "UPDATE `swaps` SET `idena_tx` = ? WHERE `uuid` = ?;";
         conP.query(sql, [req.body.tx, req.body.uuid]).then(() => {
             logger.debug(`Completed ${reqInfo}`)
@@ -192,6 +196,43 @@ async function create(req, res) {
             }
         })
     })
+}
+
+router.get('/calculateFees/:uuid', async function (req, res) {
+    try {
+        await calculateFees(req, res)
+    } catch (error) {
+        logger.error(`Failed ${req.path}: ${error}`)
+        res.sendStatus(500)
+    }
+});
+
+async function calculateFees(req, res) {
+    const reqInfo = req.path
+    logger.debug(`Got ${reqInfo}`)
+    if (!uuid.validate(req.params.uuid)) {
+        logger.debug(`Bad request ${reqInfo}`)
+        res.sendStatus(400);
+        return
+    }
+    let sql = "SELECT address, amount FROM `swaps` WHERE `uuid` = ? LIMIT 1;";
+    db.promise().execute(sql, [req.params.uuid])
+        .then(async ([data, fields]) => {
+            if (!data[0]) {
+                logger.debug(`Not found ${reqInfo}`)
+                res.sendStatus(404);
+                return
+            }
+            logger.debug(`Completed ${reqInfo}`)
+
+            res.status(200).json({
+                result: await bsc.calculateFees(data[0].address, data[0].amount)
+            })
+        })
+        .catch(err => {
+            logger.error(`Failed ${reqInfo}: ${err}`)
+            res.sendStatus(500);
+        });
 }
 
 module.exports = router;
