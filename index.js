@@ -20,7 +20,7 @@ db = mysql.createPool({
 
 async function handleIdenaToBscSwap(swap, conP, logger) {
     if (!await idena.isTxExist(swap.idena_tx)) {
-        let date = Date.parse(swap.time);
+        let date = new Date(swap.time);
         date.setDate(date.getDate() + 1);
         if (date < Date.now()) {
             logger.info("Swap is outdated")
