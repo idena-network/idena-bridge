@@ -5,7 +5,9 @@ const ethers = require('ethers');
 const abi = require('./abi.js');
 const InputDataDecoder = require('ethereum-input-data-decoder');
 require('dotenv').config();
-const logger = require('../logger').child({component: "bsc"})
+const logger = require('../logger').child({
+    component: "bsc"
+})
 
 
 exports.mint = async function (address, amount) {
@@ -171,4 +173,28 @@ exports.isNewTx = async function (tx) {
         logger.error(`Failed to check if tx is new: ${error}`);
         return false
     }
+}
+
+exports.calculateFees = async function (address, amount) {
+    try {
+        amount = ethers.utils.parseEther((parseFloat(amount)).toString());
+        const provider = new ethers.providers.JsonRpcProvider(process.env.BSC_RPC, parseInt(process.env.BSC_NETWORK));
+        const signer = new ethers.Wallet(process.env.BSC_PRIVATE_KEY, provider);
+        const contract = new ethers.Contract(
+            process.env.BSC_CONTRACT,
+            abi,
+            signer
+        );
+        let idenaPrice = await getIdenaPrice();
+        if (idenaPrice == 0) {
+            return null
+        }
+        let fees = ethers.utils.parseUnits((await provider.getGasPrice() * await contract.estimateGas.mint(address, amount) / idenaPrice).toString(), 'ether').div(ethers.BigNumber.from(100)).mul(ethers.BigNumber.from(process.env.BSC_FEES));
+        return parseFloat(fees / 10 ** 18);
+
+    } catch (error) {
+        logger.error(`Failed to calculate fees: ${error}`);
+        return null
+    }
+
 }
