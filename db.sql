@@ -30,3 +30,17 @@ CREATE TABLE `used_txs`
 );
 ALTER TABLE `used_txs`
     ADD UNIQUE INDEX `used_txs_blockchain_tx_hash_unique_idx` (`tx_hash`, `blockchain`);
+
+CREATE TABLE `pending_refunds`
+(
+    `id`      int(11)         NOT NULL,
+    `address` varchar(42)     NOT NULL,
+    `amount`  decimal(36, 18) NOT NULL,
+    PRIMARY KEY (`id`)
+);
+
+CREATE TABLE `refunds`
+(
+    `idena_tx` varchar(66)        DEFAULT NULL,
+    `time`     timestamp NOT NULL DEFAULT current_timestamp()
+)
