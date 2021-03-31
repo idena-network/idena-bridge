@@ -98,7 +98,7 @@ async function handleBscToIdenaSwap(swap, conP, logger) {
         hash,
         fees,
         errorMessage
-    } = await idena.send(swap.address, swap.amount);
+    } = await idena.send(swap.address, swap.amount, true);
     if (!hash) {
         const reason = errorMessage ? errorMessage : 'Unknown'
         logger.error(`Unable to send idena tx: ${reason}`)
@@ -154,7 +154,48 @@ async function checkSwaps() {
     }
 }
 
+async function checkRefunds() {
+    logger.trace("Starting to check refunds")
+    let conP = db.promise();
+    let sql = "SELECT `id`, `address`, `amount` FROM `pending_refunds`";
+    let data
+    try {
+        [data] = await conP.execute(sql);
+    } catch (error) {
+        logger.error(`Failed to load pending swaps: ${error}`);
+        return
+    }
+    if (!data.length) {
+        return
+    }
+    logger.trace(`Starting to handle pending refunds, cnt: ${data.length}`)
+    for (refund of data) {
+        const refundLogger = logger.child({refundId: refund.id})
+        try {
+            await handleRefund(refund, conP, refundLogger)
+        } catch (error) {
+            refundLogger.error(`Failed to handle refund: ${error}`);
+        }
+    }
+}
+
+async function handleRefund(refund, conP, logger) {
+    logger.info(`Starting to handle refund, address: ${refund.address}, amount: ${refund.amount}`)
+    await conP.execute("DELETE FROM `pending_refunds` WHERE `id` = ?", [refund.id])
+    logger.info('Deleted pending refund')
+    let {hash, errorMessage} = await idena.send(refund.address, refund.amount, false);
+    if (!hash) {
+        const reason = errorMessage ? errorMessage : 'Unknown'
+        logger.error(`Unable to send idena tx: ${reason}`)
+        return
+    }
+    logger.info(`Sent idena tx ${hash}`)
+    await conP.execute("INSERT INTO `refunds`(`idena_tx`) VALUES (?);", [hash]);
+    logger.info(`Refund completed`)
+}
+
 async function loopCheckSwaps() {
+    await checkRefunds();
     await checkSwaps();
     setTimeout(loopCheckSwaps, parseInt(process.env.CHECKING_DELAY));
 }
