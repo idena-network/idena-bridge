@@ -83,14 +83,14 @@ exports.send = async function (address, amount, takeFee) {
                 hash: apiResp.data.result,
                 fees: parseFloat(process.env.IDENA_FIXED_FEES),
                 errorMessage: apiResp.data.error && apiResp.data.error.message
-            } || null;
+            };
         } else {
-            return null
+            return {}
         }
 
     } catch (error) {
         logger.error(`Failed to send tx: ${error}`);
-        return null
+        return {}
     }
 
 }
