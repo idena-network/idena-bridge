@@ -21,19 +21,20 @@ exports.mint = async function (address, amount) {
             signer
         );
         let idenaPrice = await getIdenaPrice();
-        if (idenaPrice == 0) {
-            return null
+        if (!idenaPrice) {
+            return {}
         }
         let fees = ethers.utils.parseUnits((await provider.getGasPrice() * await contract.estimateGas.mint(address, amount) / idenaPrice).toString(), 'ether').div(ethers.BigNumber.from(100)).mul(ethers.BigNumber.from(process.env.BSC_FEES));
+        let amountToMint = amount.sub(fees)
+        logger.debug(`Start minting, address: ${address}, base amount: ${amount}, fee: ${fees}, amount to mint: ${amountToMint}`)
         return {
-            hash: (await contract.mint(address, amount.sub(fees))).hash,
+            hash: (await contract.mint(address, amountToMint)).hash,
             fees: parseFloat(fees / 10 ** 18)
         }
     } catch (error) {
         logger.error(`Failed to mint: ${error}`);
-        return null
+        return {}
     }
-
 }
 
 exports.isValidBurnTx = async function (txHash, address, amount, date) {
@@ -154,11 +155,15 @@ exports.getContractAddress = function () {
 
 async function getIdenaPrice() {
     let resp = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=idena&vs_currencies=bnb");
-    if (resp.status === 200 && resp.data.idena.bnb) {
-        return ethers.utils.parseEther(resp.data.idena.bnb.toString());
-    } else {
+    if (resp.status !== 200) {
+        logger.error(`Failed to get idena price, status: ${resp.status}`);
         return 0
     }
+    if (!resp.data.idena.bnb) {
+        logger.error(`Failed to get idena price, res: ${resp.data.idena.bnb}`);
+        return 0
+    }
+    return ethers.utils.parseEther(resp.data.idena.bnb.toString());
 }
 
 exports.isNewTx = async function (tx) {
@@ -186,15 +191,15 @@ exports.calculateFees = async function (address, amount) {
             signer
         );
         let idenaPrice = await getIdenaPrice();
-        if (idenaPrice == 0) {
-            return null
+        if (!idenaPrice) {
+            return {}
         }
         let fees = ethers.utils.parseUnits((await provider.getGasPrice() * await contract.estimateGas.mint(address, amount) / idenaPrice).toString(), 'ether').div(ethers.BigNumber.from(100)).mul(ethers.BigNumber.from(process.env.BSC_FEES));
         return parseFloat(fees / 10 ** 18);
 
     } catch (error) {
         logger.error(`Failed to calculate fees: ${error}`);
-        return null
+        return {}
     }
 
 }

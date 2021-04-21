@@ -77,16 +77,19 @@ async function handleBscToIdenaSwap(swap, conP, logger) {
         // not valid
         logger.info("BSC tx is invalid")
         await conP.execute("UPDATE `swaps` SET `status` = 'Fail' , `mined` = '2' , `fail_reason` = 'Not Valid' WHERE `uuid` = ?", [swap.uuid])
+        return
     }
     if (!await bsc.isNewTx(swap.bsc_tx)) {
         // not new
         logger.info("BSC tx already used")
         await conP.execute("UPDATE `swaps` SET `status` = 'Fail' , `mined` = '2' , `fail_reason` = 'Not Valid' WHERE `uuid` = ?", [swap.uuid])
+        return
     }
     if (!await bsc.isTxConfirmed(swap.bsc_tx)) {
         // waiting to be confirmed
         logger.debug("BSC tx is not confirmed")
         await conP.execute("UPDATE `swaps` SET `mined` = '0' WHERE `uuid` = ?", [swap.uuid])
+        return
     }
     // confirmed
     const [data2] = await conP.execute("INSERT INTO `used_txs`(`blockchain`,`tx_hash`) VALUES ('bsc',?);", [swap.bsc_tx]);
