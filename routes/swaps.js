@@ -133,7 +133,8 @@ async function assign(req, res) {
     }
     if (data[0] && data[0].type === 1 && !(data[0].bsc_tx) && ethers.utils.isHexString(req.body.tx) && req.body.tx.length === 66) {
         if (await bsc.isTxExist(req.body.tx)) {
-            if (await bsc.isValidBurnTx(req.body.tx, data[0].address, data[0].amount, data[0].time) && await bsc.isNewTx(req.body.tx)) {
+            const {valid} = await bsc.validateBurnTx(req.body.tx, data[0].address, data[0].amount, data[0].time)
+            if (valid && await bsc.isNewTx(req.body.tx)) {
                 sql = "UPDATE `swaps` SET `bsc_tx` = ? WHERE `uuid` = ?;";
                 conP.query(sql, [req.body.tx, req.body.uuid]).then(() => {
                     logger.debug(`Completed ${reqInfo}`)

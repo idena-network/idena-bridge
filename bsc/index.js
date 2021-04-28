@@ -9,7 +9,6 @@ const logger = require('../logger').child({
     component: "bsc"
 })
 
-
 exports.mint = async function (address, amount) {
     try {
         amount = ethers.utils.parseEther((parseFloat(amount)).toString());
@@ -37,7 +36,7 @@ exports.mint = async function (address, amount) {
     }
 }
 
-exports.isValidBurnTx = async function (txHash, address, amount, date) {
+exports.validateBurnTx = async function (txHash, address, amount, date) {
     function extractDestAddress(inputData) {
         try {
             if (!inputData) {
@@ -62,56 +61,69 @@ exports.isValidBurnTx = async function (txHash, address, amount, date) {
             abi
         );
 
-        let txReceipt = await provider.getTransactionReceipt(txHash);
+        const txReceipt = await provider.getTransactionReceipt(txHash);
+
+        if (!txReceipt) {
+            logger.info(`Unable to get tx receipt, hash: ${txHash}`);
+            return {
+                retry: true
+            }
+        }
 
         if (txReceipt.status !== 1) {
             logger.info(`Wrong status, actual: ${txReceipt.status}, expected: 1`);
-            return false
+            return {}
         }
-        if (txReceipt.logs.length === 0) {
+        if (!txReceipt.logs || txReceipt.logs.length === 0) {
             logger.info(`No logs`);
-            return false
+            return {}
+        }
+        if (!txReceipt.to) {
+            logger.info(`No recipient`);
+            return {}
         }
         if (txReceipt.to.toLowerCase() !== process.env.BSC_CONTRACT.toLowerCase()) {
             logger.info(`Wrong recipient, actual: ${txReceipt.to}, expected: ${process.env.BSC_CONTRACT}`);
-            return false
+            return {}
         }
         let tx = await provider.getTransaction(txHash)
         let destAddress = tx && extractDestAddress(tx.data)
         if (destAddress.toLowerCase() !== address.toLowerCase().slice(2)) {
             logger.info(`Wrong dest address, actual: ${destAddress}, expected: ${address}`);
-            return false
+            return {}
         }
         const method = contract.interface.parseLog(txReceipt.logs[0]).name
         if (method !== "Transfer") {
             logger.info(`Wrong method, actual: ${method}, expected: Transfer`);
-            return false
+            return {}
         }
         const value = contract.interface.parseLog(txReceipt.logs[0]).args.value
         if (!(value >= ethers.utils.parseEther(amount.toString()))) {
             logger.info(`Wrong value, actual: ${value}, expected: at least ${amount}`);
-            return false
+            return {}
         }
         const from = contract.interface.parseLog(txReceipt.logs[0]).args.from
         if (from.toLowerCase() !== tx.from.toLowerCase()) {
             logger.info(`Wrong sender, actual: ${from}, expected: ${tx.from}`);
-            return false
+            return {}
         }
         const to = contract.interface.parseLog(txReceipt.logs[0]).args.to
         if (to.toLowerCase() !== "0x0000000000000000000000000000000000000000") {
             logger.info(`Wrong recipient, actual: ${to}, expected: 0x0000000000000000000000000000000000000000`);
-            return false
+            return {}
         }
         const block = await provider.getBlock(tx.blockHash)
         const blockDate = new Date(block.timestamp * 1000);
         if (blockDate.getTime() < date.getTime()) {
             logger.info("Tx is not actual");
-            return false
+            return {}
         }
-        return true
+        return {
+            valid: true
+        }
     } catch (error) {
         logger.error(`Failed to check if burn tx is valid: ${error}`);
-        return false
+        return {}
     }
 }
 
@@ -129,6 +141,7 @@ exports.isTxExist = async function (txHash) {
         return false
     }
 }
+
 exports.isTxConfirmed = async function (txHash) {
     try {
         const provider = new ethers.providers.JsonRpcProvider(process.env.BSC_RPC, parseInt(process.env.BSC_NETWORK));
@@ -144,14 +157,15 @@ exports.isTxConfirmed = async function (txHash) {
     }
 
 }
+
 exports.getWalletAddress = async function () {
     const signer = new ethers.Wallet(process.env.BSC_PRIVATE_KEY);
     return await signer.getAddress();
 }
+
 exports.getContractAddress = function () {
     return process.env.BSC_CONTRACT;
 }
-
 
 async function getIdenaPrice() {
     let resp = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=idena&vs_currencies=bnb");
