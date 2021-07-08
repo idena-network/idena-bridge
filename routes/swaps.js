@@ -108,15 +108,28 @@ async function assign(req, res) {
         return
     }
 
+    async function updateTx(sql) {
+        conP.execute(sql, [req.body.tx, req.body.uuid]).then((result) => {
+            if (!result || !result.length || !result[0].affectedRows) {
+                logger.debug(`Bad request ${reqInfo}`)
+                res.sendStatus(400);
+                return
+            }
+            logger.debug(`Completed ${reqInfo}`)
+            res.sendStatus(200);
+        }).catch(reject)
+    }
+
     if (data[0] && data[0].type === 0 && !(data[0].idena_tx) && ethers.utils.isHexString(req.body.tx) && req.body.tx.length === 66) {
+
+        async function updateIdenaTx() {
+            sql = "UPDATE `swaps` SET `idena_tx` = ? WHERE `uuid` = ? AND `idena_tx` IS NULL;";
+            await updateTx(sql)
+        }
 
         if (await idena.isTxExist(req.body.tx)) {
             if (await idena.isValidSendTx(req.body.tx, data[0].address, data[0].amount, data[0].time) && await idena.isNewTx(req.body.tx)) {
-                sql = "UPDATE `swaps` SET `idena_tx` = ? WHERE `uuid` = ? ;";
-                conP.execute(sql, [req.body.tx, req.body.uuid]).then(() => {
-                    logger.debug(`Completed ${reqInfo}`)
-                    res.sendStatus(200);
-                }).catch(reject)
+                await updateIdenaTx()
                 return
             }
             logger.debug(`Bad request ${reqInfo}`)
@@ -124,33 +137,27 @@ async function assign(req, res) {
             return
         }
 
-        sql = "UPDATE `swaps` SET `idena_tx` = ? WHERE `uuid` = ?;";
-        conP.query(sql, [req.body.tx, req.body.uuid]).then(() => {
-            logger.debug(`Completed ${reqInfo}`)
-            res.sendStatus(200);
-        }).catch(reject)
+        await updateIdenaTx()
         return
     }
     if (data[0] && data[0].type === 1 && !(data[0].bsc_tx) && ethers.utils.isHexString(req.body.tx) && req.body.tx.length === 66) {
+
+        async function updateBscTx() {
+            sql = "UPDATE `swaps` SET `bsc_tx` = ? WHERE `uuid` = ? AND `bsc_tx` IS NULL;";
+            await updateTx(sql)
+        }
+
         if (await bsc.isTxExist(req.body.tx)) {
             const {valid} = await bsc.validateBurnTx(req.body.tx, data[0].address, data[0].amount, data[0].time)
             if (valid && await bsc.isNewTx(req.body.tx)) {
-                sql = "UPDATE `swaps` SET `bsc_tx` = ? WHERE `uuid` = ?;";
-                conP.query(sql, [req.body.tx, req.body.uuid]).then(() => {
-                    logger.debug(`Completed ${reqInfo}`)
-                    res.sendStatus(200);
-                }).catch(reject)
+                await updateBscTx()
                 return
             }
             logger.debug(`Bad request ${reqInfo}`)
             res.sendStatus(400);
             return
         }
-        sql = "UPDATE `swaps` SET `bsc_tx` = ? WHERE `uuid` = ?;";
-        conP.query(sql, [req.body.tx, req.body.uuid]).then(() => {
-            logger.debug(`Completed ${reqInfo}`)
-            res.sendStatus(200);
-        }).catch(reject)
+        await updateBscTx()
         return
     }
     logger.debug(`Bad request ${reqInfo}`)
