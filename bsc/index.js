@@ -215,5 +215,46 @@ exports.calculateFees = async function (address, amount) {
         logger.error(`Failed to calculate fees: ${error}`);
         return {}
     }
+}
 
+let tokenSupply
+
+exports.loopTokenSupplyRefreshing = async function () {
+    let res = await getTokenSupply()
+    if (res) {
+        tokenSupply = res
+        logger.info(`Cached token supply refreshed: ${tokenSupply}`);
+    }
+    setTimeout(exports.loopTokenSupplyRefreshing, 60000);
+}
+
+exports.tokenSupply = async function () {
+    let res = tokenSupply
+    if (res) {
+        return res
+    }
+    return await getTokenSupply()
+}
+
+async function getTokenSupply() {
+    let resp = await axios.get(`https://api.bscscan.com/api?module=stats&action=tokensupply&contractaddress=${process.env.BSC_CONTRACT}`);
+    if (!resp) {
+        logger.error(`Failed to get token supply: no response`);
+        return false
+    }
+    if (resp.status !== 200) {
+        logger.error(`Failed to get token supply, status: ${resp.status}`);
+        return false
+    }
+    if (!resp.data) {
+        logger.error(`Failed to get token supply: no data in response`);
+        return false
+    }
+    if (resp.data.message !== "OK") {
+        logger.error(`Failed to get token supply, non-ok message: ${resp.data.result}`);
+        return false
+    }
+    const res = resp.data.result
+    logger.info(`Got token supply: ${res}`);
+    return res
 }

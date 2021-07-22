@@ -39,6 +39,18 @@ async function latest(req, res) {
     })
 }
 
+router.get('/tokensupply', async function (req, res) {
+    try {
+        const tokenSupply = await bsc.tokenSupply()
+        res.status(200).json({
+            result: tokenSupply
+        })
+    } catch (error) {
+        logger.error(`Failed ${req.path}: ${error}`)
+        res.sendStatus(500)
+    }
+});
+
 router.get('/info/:uuid', async function (req, res) {
     try {
         await info(req, res)
