@@ -221,6 +221,7 @@ app.use('/swaps', swaps);
 async function start() {
     await idena.initNonce()
     loopCheckSwaps();
+    bsc.loopTokenSupplyRefreshing();
     const port = 8000;
     app.listen(port, () => logger.info(`Server started, listening on port: ${port}`));
 }
