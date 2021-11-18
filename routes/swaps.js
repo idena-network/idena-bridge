@@ -139,8 +139,9 @@ async function assign(req, res) {
             await updateTx(sql)
         }
 
-        if (await idena.isTxExist(req.body.tx)) {
-            if (await idena.isValidSendTx(req.body.tx, data[0].address, data[0].amount, data[0].time) && await idena.isNewTx(req.body.tx)) {
+        const idenaTx = await idena.getTransaction(req.body.tx)
+        if (idenaTx) {
+            if (await idena.isValidSendTx(idenaTx, data[0].address, data[0].amount, data[0].time) && await idena.isNewTx(req.body.tx)) {
                 await updateIdenaTx()
                 return
             }
@@ -159,8 +160,9 @@ async function assign(req, res) {
             await updateTx(sql)
         }
 
-        if (await bsc.isTxExist(req.body.tx)) {
-            const {valid} = await bsc.validateBurnTx(req.body.tx, data[0].address, data[0].amount, data[0].time)
+        const bscTxReceipt = await bsc.getTransactionReceipt(req.body.tx)
+        if (bscTxReceipt) {
+            const {valid} = await bsc.validateBurnTx(bscTxReceipt, req.body.tx, data[0].address, data[0].amount, data[0].time)
             if (valid && await bsc.isNewTx(req.body.tx)) {
                 await updateBscTx()
                 return

@@ -9,7 +9,7 @@ const logger = require('../logger').child({
     component: "bsc"
 })
 
-exports.mint = async function (address, amount) {
+exports.estimateMint = async function (address, amount) {
     try {
         amount = ethers.utils.parseEther((parseFloat(amount)).toString());
         const provider = new ethers.providers.JsonRpcProvider(process.env.BSC_RPC, parseInt(process.env.BSC_NETWORK));
@@ -19,12 +19,25 @@ exports.mint = async function (address, amount) {
             abi,
             signer
         );
-        let idenaPrice = await getIdenaPrice();
+        const idenaPrice = await getIdenaPrice();
         if (!idenaPrice) {
-            return {}
+            return null
         }
-        let fees = ethers.utils.parseUnits((await provider.getGasPrice() * await contract.estimateGas.mint(address, amount) / idenaPrice).toString(), 'ether').div(ethers.BigNumber.from(100)).mul(ethers.BigNumber.from(process.env.BSC_FEES));
-        let amountToMint = amount.sub(fees)
+        const fees = ethers.utils.parseUnits((await provider.getGasPrice() * await contract.estimateGas.mint(address, amount) / idenaPrice).toString(), 'ether').div(ethers.BigNumber.from(100)).mul(ethers.BigNumber.from(process.env.BSC_FEES));
+        return {
+            contract: contract,
+            amount: amount,
+            fees: fees
+        }
+    } catch (error) {
+        logger.error(`Failed to estimate mint: ${error}`);
+        return null
+    }
+}
+
+exports.mint = async function (contract, address, amount, fees) {
+    try {
+        const amountToMint = amount.sub(fees)
         logger.debug(`Start minting, address: ${address}, base amount: ${amount}, fee: ${fees}, amount to mint: ${amountToMint}`)
         return {
             hash: (await contract.mint(address, amountToMint)).hash,
@@ -36,7 +49,7 @@ exports.mint = async function (address, amount) {
     }
 }
 
-exports.validateBurnTx = async function (txHash, address, amount, date) {
+exports.validateBurnTx = async function (txReceipt, txHash, address, amount, date) {
     function extractDestAddress(inputData) {
         try {
             if (!inputData) {
@@ -56,13 +69,9 @@ exports.validateBurnTx = async function (txHash, address, amount, date) {
 
     try {
         const provider = new ethers.providers.JsonRpcProvider(process.env.BSC_RPC, parseInt(process.env.BSC_NETWORK));
-        const contract = new ethers.Contract(
-            process.env.BSC_CONTRACT,
-            abi
-        );
-
-        const txReceipt = await provider.getTransactionReceipt(txHash);
-
+        if (!txReceipt) {
+            txReceipt = await provider.getTransactionReceipt(txHash);
+        }
         if (!txReceipt) {
             logger.info(`Unable to get tx receipt, hash: ${txHash}`);
             return {
@@ -86,12 +95,23 @@ exports.validateBurnTx = async function (txHash, address, amount, date) {
             logger.info(`Wrong recipient, actual: ${txReceipt.to}, expected: ${process.env.BSC_CONTRACT}`);
             return {}
         }
+
         let tx = await provider.getTransaction(txHash)
-        let destAddress = tx && extractDestAddress(tx.data)
+        if (!tx) {
+            logger.info(`Unable to get tx, hash: ${txHash}`);
+            return {
+                retry: true
+            }
+        }
+        let destAddress = extractDestAddress(tx.data)
         if (destAddress.toLowerCase() !== address.toLowerCase().slice(2)) {
             logger.info(`Wrong dest address, actual: ${destAddress}, expected: ${address}`);
             return {}
         }
+        const contract = new ethers.Contract(
+            process.env.BSC_CONTRACT,
+            abi
+        );
         const method = contract.interface.parseLog(txReceipt.logs[0]).name
         if (method !== "Transfer") {
             logger.info(`Wrong method, actual: ${method}, expected: Transfer`);
@@ -113,44 +133,42 @@ exports.validateBurnTx = async function (txHash, address, amount, date) {
             return {}
         }
         const block = await provider.getBlock(tx.blockHash)
+        if (!block) {
+            logger.info(`Unable to get block, hash: ${tx.blockHash}`);
+            return {
+                retry: true
+            }
+        }
         const blockDate = new Date(block.timestamp * 1000);
         if (blockDate.getTime() < date.getTime()) {
             logger.info("Tx is not actual");
             return {}
         }
         return {
-            valid: true
+            valid: true,
+            txReceipt: txReceipt,
         }
     } catch (error) {
         logger.error(`Failed to check if burn tx is valid: ${error}`);
-        return {}
+        return {
+            retry: true
+        }
     }
 }
 
-exports.isTxExist = async function (txHash) {
+exports.getTransactionReceipt = async function (txHash) {
     try {
         const provider = new ethers.providers.JsonRpcProvider(process.env.BSC_RPC, parseInt(process.env.BSC_NETWORK));
-        let tx = await provider.getTransactionReceipt(txHash);
-        if (tx) {
-            return true
-        } else {
-            return false
-        }
+        return await provider.getTransactionReceipt(txHash);
     } catch (error) {
-        logger.error(`Failed to check if tx exists: ${error}`);
-        return false
+        logger.error(`Failed to get transaction ${txHash} receipt: ${error}`);
+        return null
     }
 }
 
-exports.isTxConfirmed = async function (txHash) {
+exports.isTxConfirmed = async function (txReceipt) {
     try {
-        const provider = new ethers.providers.JsonRpcProvider(process.env.BSC_RPC, parseInt(process.env.BSC_NETWORK));
-        let tx = await provider.getTransactionReceipt(txHash);
-        if (tx) {
-            return tx.confirmations >= process.env.BSC_CONFIRMATIONS_BLOCKS;
-        } else {
-            return false
-        }
+        return txReceipt && txReceipt.confirmations >= process.env.BSC_CONFIRMATIONS_BLOCKS;
     } catch (error) {
         logger.error(`Failed to check if tx is confirmed: ${error}`);
         return false
@@ -220,10 +238,14 @@ exports.calculateFees = async function (address, amount) {
 let tokenSupply
 
 exports.loopTokenSupplyRefreshing = async function () {
-    let res = await getTokenSupply()
-    if (res) {
-        tokenSupply = res
-        logger.info(`Cached token supply refreshed: ${tokenSupply}`);
+    try {
+        const res = await getTokenSupply()
+        if (res) {
+            tokenSupply = res
+            logger.info(`Cached token supply refreshed: ${tokenSupply}`);
+        }
+    } catch (error) {
+        logger.error(`Failed to refresh token supply: ${error}`);
     }
     setTimeout(exports.loopTokenSupplyRefreshing, 60000);
 }

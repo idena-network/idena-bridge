@@ -23,11 +23,12 @@ async function handleIdenaToBscSwap(swap, conP, logger) {
         logger.trace("No Idena tx")
         return false
     }
-    if (!await idena.isTxExist(swap.idena_tx)) {
+    const idenaTx = await idena.getTransaction(swap.idena_tx)
+    if (!idenaTx) {
         logger.trace("Idena tx doesn't exist")
         return false
     }
-    if (!await idena.isValidSendTx(swap.idena_tx, swap.address, swap.amount, swap.time)) {
+    if (!await idena.isValidSendTx(idenaTx, swap.address, swap.amount, swap.time)) {
         // not valid
         logger.info("Idena tx is invalid")
         await conP.execute("UPDATE `swaps` SET `status` = 'Fail', `fail_reason` = 'Not Valid' WHERE `uuid` = ?", [swap.uuid])
@@ -39,17 +40,22 @@ async function handleIdenaToBscSwap(swap, conP, logger) {
         await conP.execute("UPDATE `swaps` SET `status` = 'Fail', `fail_reason` = 'Not Valid' WHERE `uuid` = ?", [swap.uuid])
         return true
     }
-    if (!await idena.isTxConfirmed(swap.idena_tx)) {
+    if (!await idena.isTxConfirmed(idenaTx)) {
         // waiting to be confirmed
         logger.debug("Idena tx is not confirmed")
         await conP.execute("UPDATE `swaps` SET `mined` = '0' WHERE `uuid` = ?", [swap.uuid])
         return true
     }
-    if (!await idena.isTxActual(swap.idena_tx, swap.time)) {
+    if (!await idena.isTxActual(idenaTx, swap.time)) {
         // not valid (not actual)
         logger.info("Idena tx is not actual")
         await conP.execute("UPDATE `swaps` SET `status` = 'Fail', `fail_reason` = 'Not Valid' WHERE `uuid` = ?", [swap.uuid])
         return true
+    }
+    const estimateRes = await bsc.estimateMint(swap.address, swap.amount);
+    if (!estimateRes) {
+        logger.info("Unable to estimate mint bsc coins, there will be retry")
+        return false
     }
     // confirmed
     const [data] = await conP.execute("INSERT INTO `used_txs` (`blockchain`,`tx_hash`) VALUES ('idena', ?);", [swap.idena_tx]);
@@ -60,7 +66,7 @@ async function handleIdenaToBscSwap(swap, conP, logger) {
     let {
         hash,
         fees
-    } = await bsc.mint(swap.address, swap.amount);
+    } = await bsc.mint(estimateRes.contract, swap.address, estimateRes.amount, estimateRes.fees);
     if (!hash) {
         logger.error("Unable to mint bsc coins")
         await conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`mined` = '1' ,`fail_reason` = 'Unknown' WHERE `uuid` = ?", [swap.uuid])
@@ -76,7 +82,7 @@ async function handleBscToIdenaSwap(swap, conP, logger) {
         logger.trace("No BSC tx")
         return false
     }
-    const {valid, retry} = await bsc.validateBurnTx(swap.bsc_tx, swap.address, swap.amount, swap.time)
+    const {valid, retry, txReceipt} = await bsc.validateBurnTx(null, swap.bsc_tx, swap.address, swap.amount, swap.time)
     if (!valid) {
         if (retry) {
             logger.info("BSC tx is invalid, there will be retry")
@@ -93,7 +99,7 @@ async function handleBscToIdenaSwap(swap, conP, logger) {
         await conP.execute("UPDATE `swaps` SET `status` = 'Fail', `mined` = '2', `fail_reason` = 'Not Valid' WHERE `uuid` = ?", [swap.uuid])
         return true
     }
-    if (!await bsc.isTxConfirmed(swap.bsc_tx)) {
+    if (!await bsc.isTxConfirmed(txReceipt)) {
         // waiting to be confirmed
         logger.debug("BSC tx is not confirmed")
         await conP.execute("UPDATE `swaps` SET `mined` = '0' WHERE `uuid` = ?", [swap.uuid])
