@@ -95,34 +95,18 @@ exports.send = async function (address, amount, takeFee) {
 
 }
 
-async function getTransaction(tx) {
+exports.isTxConfirmed = async function (transaction) {
     try {
-        let transaction = await axios.post(process.env.IDENA_PROVIDER, {
-            "method": "bcn_transaction",
-            "id": 1,
-            "key": process.env.IDENA_API_KEY,
-            "params": [tx]
-        });
-        return transaction.data.result || null
-    } catch (error) {
-        logger.error(`Failed to get tx: ${error}`);
-        return null
-    }
-}
-
-exports.isTxConfirmed = async function (tx) {
-    try {
-        let transaction = await getTransaction(tx);
-        if (!transaction.timestamp) {
+        if (!transaction || !transaction.timestamp) {
             return false
         }
-        let bcn_block = await axios.post(process.env.IDENA_PROVIDER, {
+        const bcn_block = await axios.post(process.env.IDENA_PROVIDER, {
             "method": "bcn_block",
             "id": 1,
             "key": process.env.IDENA_API_KEY,
             "params": [transaction.blockHash]
         })
-        let bcn_syncing = await axios.post(process.env.IDENA_PROVIDER, {
+        const bcn_syncing = await axios.post(process.env.IDENA_PROVIDER, {
             "method": "bcn_syncing",
             "id": 1,
             "key": process.env.IDENA_API_KEY,
@@ -135,17 +119,16 @@ exports.isTxConfirmed = async function (tx) {
     }
 }
 
-exports.isTxActual = async function (txHash, date) {
+exports.isTxActual = async function (transaction, date) {
     try {
-        const transaction = await getTransaction(txHash);
-        return await isTxActual(transaction, date)
+        return isTxActual(transaction, date)
     } catch (error) {
         logger.error(`Failed to check if tx is actual: ${error}`);
         return false
     }
 }
 
-async function isTxActual(tx, date) {
+function isTxActual(tx, date) {
     try {
         return new Date(tx.timestamp * 1000).getTime() >= date.getTime()
     } catch (error) {
@@ -193,7 +176,7 @@ async function getNonce(epoch) {
     }
 }
 
-exports.isValidSendTx = async function (txHash, address, amount, date) {
+exports.isValidSendTx = async function (transaction, address, amount, date) {
     function extractDestAddress(payload) {
         try {
             const comment = Buffer.from(payload.substring(2), 'hex').toString()
@@ -209,7 +192,6 @@ exports.isValidSendTx = async function (txHash, address, amount, date) {
     }
 
     try {
-        let transaction = await getTransaction(txHash);
         if (!transaction) {
             logger.info("No tx");
             return false
@@ -243,17 +225,18 @@ exports.isValidSendTx = async function (txHash, address, amount, date) {
     }
 }
 
-exports.isTxExist = async function (txHash) {
+exports.getTransaction = async function (txHash) {
     try {
-        let transaction = await getTransaction(txHash);
-        if (transaction) {
-            return true
-        } else {
-            return false
-        }
+        const transaction = await axios.post(process.env.IDENA_PROVIDER, {
+            "method": "bcn_transaction",
+            "id": 1,
+            "key": process.env.IDENA_API_KEY,
+            "params": [txHash]
+        });
+        return transaction.data.result || null
     } catch (error) {
-        logger.error(`Failed to check if tx exists: ${error}`);
-        return false
+        logger.error(`Failed to get tx ${txHash}: ${error}`);
+        return null
     }
 }
 
