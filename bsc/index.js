@@ -39,8 +39,12 @@ exports.mint = async function (contract, address, amount, fees) {
     try {
         const amountToMint = amount.sub(fees)
         logger.debug(`Start minting, address: ${address}, base amount: ${amount}, fee: ${fees}, amount to mint: ${amountToMint}`)
+        const res = await contract.mint(address, amountToMint)
         return {
-            hash: (await contract.mint(address, amountToMint)).hash,
+            hash: res.hash,
+            nonce: res.nonce,
+            gasPrice: res.gasPrice,
+            gasLimit: res.gasLimit,
             fees: parseFloat(fees / 10 ** 18)
         }
     } catch (error) {
@@ -242,7 +246,7 @@ exports.loopTokenSupplyRefreshing = async function () {
         const res = await getTokenSupply()
         if (res) {
             tokenSupply = res
-            logger.info(`Cached token supply refreshed: ${tokenSupply}`);
+            logger.trace(`Cached token supply refreshed: ${tokenSupply}`);
         }
     } catch (error) {
         logger.error(`Failed to refresh token supply: ${error}`);
