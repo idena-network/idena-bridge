@@ -65,6 +65,9 @@ async function handleIdenaToBscSwap(swap, conP, logger) {
     }
     let {
         hash,
+        nonce,
+        gasPrice,
+        gasLimit,
         fees
     } = await bsc.mint(estimateRes.contract, swap.address, estimateRes.amount, estimateRes.fees);
     if (!hash) {
@@ -72,7 +75,7 @@ async function handleIdenaToBscSwap(swap, conP, logger) {
         await conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`mined` = '1' ,`fail_reason` = 'Unknown' WHERE `uuid` = ?", [swap.uuid])
         return true
     }
-    logger.info(`Swap completed, bsc tx hash: ${hash}, fees: ${fees}`)
+    logger.info(`Swap completed, bsc tx hash: ${hash}, fees: ${fees}, nonce: ${nonce}, gasPrice: ${gasPrice}, gasLimit: ${gasLimit}`)
     await conP.execute("UPDATE `swaps` SET `status` = 'Success' ,`mined` = '1' ,`bsc_tx` = ? ,`fees` = ? WHERE `uuid` = ?", [hash, fees, swap.uuid])
     return true
 }
