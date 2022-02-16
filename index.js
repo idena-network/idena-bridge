@@ -18,6 +18,8 @@ db = mysql.createPool({
     timezone: 'UTC'
 });
 
+let bscInitialNonce
+
 async function handleIdenaToBscSwap(swap, conP, logger) {
     if (!swap.idena_tx) {
         logger.trace("No Idena tx")
@@ -63,13 +65,15 @@ async function handleIdenaToBscSwap(swap, conP, logger) {
         logger.error("Unable to insert used idena tx")
         return true
     }
+    const customNonce = bscInitialNonce
+    bscInitialNonce = null
     let {
         hash,
         nonce,
         gasPrice,
         gasLimit,
         fees
-    } = await bsc.mint(estimateRes.contract, swap.address, estimateRes.amount, estimateRes.fees);
+    } = await bsc.mint(estimateRes.contract, swap.address, estimateRes.amount, estimateRes.fees, customNonce);
     if (!hash) {
         logger.error("Unable to mint bsc coins")
         await conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`mined` = '1' ,`fail_reason` = 'Unknown' WHERE `uuid` = ?", [swap.uuid])
@@ -229,6 +233,11 @@ app.use('/swaps', swaps);
 
 async function start() {
     await idena.initNonce()
+
+    bscInitialNonce = await bsc.getNonce()
+    logger.info(`BSC nonce initialized: ${bscInitialNonce}`)
+    console.log(`BSC nonce initialized: ${bscInitialNonce}`)
+
     loopCheckSwaps();
     bsc.loopTokenSupplyRefreshing();
     const port = 8000;

@@ -35,11 +35,11 @@ exports.estimateMint = async function (address, amount) {
     }
 }
 
-exports.mint = async function (contract, address, amount, fees) {
+exports.mint = async function (contract, address, amount, fees, nonce) {
     try {
         const amountToMint = amount.sub(fees)
-        logger.debug(`Start minting, address: ${address}, base amount: ${amount}, fee: ${fees}, amount to mint: ${amountToMint}`)
-        const res = await contract.mint(address, amountToMint)
+        logger.debug(`Start minting, address: ${address}, base amount: ${amount}, fee: ${fees}, amount to mint: ${amountToMint}, nonce: ${nonce}`)
+        const res = nonce ? await contract.mint(address, amountToMint, {nonce: nonce}) : await contract.mint(address, amountToMint)
         return {
             hash: res.hash,
             nonce: res.nonce,
@@ -260,6 +260,17 @@ exports.tokenSupply = async function () {
         return res
     }
     return await getTokenSupply()
+}
+
+exports.getNonce = async function () {
+    try {
+        const provider = new ethers.providers.JsonRpcProvider(process.env.BSC_RPC, parseInt(process.env.BSC_NETWORK));
+        const signer = new ethers.Wallet(process.env.BSC_PRIVATE_KEY, provider);
+        return await signer.getTransactionCount()
+    } catch (error) {
+        logger.error(`Failed to get nonce: ${error}`);
+        return null
+    }
 }
 
 async function getTokenSupply() {
