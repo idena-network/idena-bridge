@@ -18,7 +18,7 @@ db = mysql.createPool({
     timezone: 'UTC'
 });
 
-let bscInitialNonce
+let bscNonce
 
 async function handleIdenaToBscSwap(swap, conP, logger) {
     if (!swap.idena_tx) {
@@ -65,8 +65,7 @@ async function handleIdenaToBscSwap(swap, conP, logger) {
         logger.error("Unable to insert used idena tx")
         return true
     }
-    const customNonce = bscInitialNonce
-    bscInitialNonce = null
+    const customNonce = bscNonce
     let {
         hash,
         nonce,
@@ -79,6 +78,7 @@ async function handleIdenaToBscSwap(swap, conP, logger) {
         await conP.execute("UPDATE `swaps` SET `status` = 'Fail' ,`mined` = '1' ,`fail_reason` = 'Unknown' WHERE `uuid` = ?", [swap.uuid])
         return true
     }
+    bscNonce++
     logger.info(`Swap completed, bsc tx hash: ${hash}, fees: ${fees}, nonce: ${nonce}, gasPrice: ${gasPrice}, gasLimit: ${gasLimit}`)
     await conP.execute("UPDATE `swaps` SET `status` = 'Success' ,`mined` = '1' ,`bsc_tx` = ? ,`fees` = ? WHERE `uuid` = ?", [hash, fees, swap.uuid])
     return true
@@ -234,9 +234,9 @@ app.use('/swaps', swaps);
 async function start() {
     await idena.initNonce()
 
-    bscInitialNonce = await bsc.getNonce()
-    logger.info(`BSC nonce initialized: ${bscInitialNonce}`)
-    console.log(`BSC nonce initialized: ${bscInitialNonce}`)
+    bscNonce = await bsc.getNonce()
+    logger.info(`BSC nonce initialized: ${bscNonce}`)
+    console.log(`BSC nonce initialized: ${bscNonce}`)
 
     loopCheckSwaps();
     bsc.loopTokenSupplyRefreshing();
