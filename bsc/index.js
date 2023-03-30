@@ -190,16 +190,21 @@ exports.getContractAddress = function () {
 }
 
 async function getIdenaPrice() {
-    let resp = await axios.get("https://api.coingecko.com/api/v3/simple/price?ids=idena&vs_currencies=bnb");
+    let resp = await axios.get("https://pro-api.coinmarketcap.com/v2/tools/price-conversion?id=5836&convert_id=1839&amount=1", {
+        headers: {
+            'X-CMC_PRO_API_KEY': process.env.PRICE_API_KEY,
+        },
+    });
     if (resp.status !== 200) {
         logger.error(`Failed to get idena price, status: ${resp.status}`);
         return 0
     }
-    if (!resp.data.idena.bnb) {
-        logger.error(`Failed to get idena price, res: ${resp.data.idena.bnb}`);
+    const price = resp.data.data.quote['1839'].price
+    if (!price) {
+        logger.error(`Failed to get idena price, res: ${resp.data}`);
         return 0
     }
-    return ethers.utils.parseEther(resp.data.idena.bnb.toString());
+    return ethers.utils.parseEther(price.toFixed(18).toString());
 }
 
 exports.isNewTx = async function (tx) {
