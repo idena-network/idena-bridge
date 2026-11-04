@@ -3,7 +3,6 @@ const {
 } = require('axios');
 const ethers = require('ethers');
 const abi = require('./abi.js');
-const InputDataDecoder = require('ethereum-input-data-decoder');
 require('dotenv').config();
 const logger = require('../logger').child({
     component: "bsc"
@@ -53,24 +52,93 @@ exports.mint = async function (contract, address, amount, fees, nonce) {
     }
 }
 
-exports.validateBurnTx = async function (txReceipt, txHash, address, amount, date) {
-    function extractDestAddress(inputData) {
-        try {
-            if (!inputData) {
-                return false
-            }
-            const inputDataDecoder = new InputDataDecoder(abi)
-            const result = inputDataDecoder.decodeData(inputData)
-            if (!result || !result.inputs || result.inputs.length < 2) {
-                return false
-            }
-            return result.inputs[1]
-        } catch (error) {
-            logger.error(`Failed to extract dest address: ${error}`);
-            return false
-        }
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+const AMOUNT_REGEX = /^\d+(\.\d{1,18})?$/
+
+// Converts a swap amount (MySQL DECIMAL(36,18) string, e.g. "18800000.000000000000000000") to wei.
+// Throws on anything that is not a plain positive decimal with at most 18 fractional digits.
+function parseAmount(amount) {
+    if (typeof amount !== 'string' && typeof amount !== 'number') {
+        throw new Error(`unsupported amount type: ${typeof amount}`)
+    }
+    const str = amount.toString()
+    if (!AMOUNT_REGEX.test(str)) {
+        throw new Error(`invalid amount: ${str}`)
+    }
+    const res = ethers.utils.parseEther(str)
+    if (!res.gt(ethers.constants.Zero)) {
+        throw new Error(`non-positive amount: ${str}`)
+    }
+    return res
+}
+
+exports.parseAmount = parseAmount
+
+// Checks the already fetched receipt and tx. Returns an error description or null if the tx is a valid burn.
+// Any exception thrown here means malformed data and is treated by the caller as an invalid tx (no retry).
+function getBurnTxError(txReceipt, tx, address, amount) {
+    const contractAddress = process.env.BSC_CONTRACT.toLowerCase()
+    if (txReceipt.status !== 1) {
+        return `Wrong status, actual: ${txReceipt.status}, expected: 1`
+    }
+    if (!txReceipt.to || txReceipt.to.toLowerCase() !== contractAddress) {
+        return `Wrong recipient, actual: ${txReceipt.to}, expected: ${process.env.BSC_CONTRACT}`
+    }
+    if (!tx.to || tx.to.toLowerCase() !== contractAddress) {
+        return `Wrong tx recipient, actual: ${tx.to}, expected: ${process.env.BSC_CONTRACT}`
+    }
+    if (!txReceipt.transactionHash || !tx.hash || txReceipt.transactionHash.toLowerCase() !== tx.hash.toLowerCase()) {
+        return `Receipt does not match tx, receipt: ${txReceipt.transactionHash}, tx: ${tx.hash}`
     }
 
+    const contractInterface = new ethers.utils.Interface(abi)
+    let call
+    try {
+        call = contractInterface.parseTransaction({data: tx.data})
+    } catch (error) {
+        return `Unable to parse tx data: ${error}`
+    }
+    if (call.sighash !== contractInterface.getSighash("customBurn")) {
+        return `Wrong method, actual: ${call.name}, expected: customBurn`
+    }
+    const destAddress = call.args.destination
+    if (destAddress.toLowerCase() !== ethers.utils.getAddress(address).toLowerCase()) {
+        return `Wrong dest address, actual: ${destAddress}, expected: ${address}`
+    }
+
+    // Sum all Transfer(tx.from -> 0x0) events emitted by the token contract; logs of other contracts are ignored.
+    const expectedValue = parseAmount(amount)
+    let burntValue = ethers.constants.Zero
+    let burnLogsCount = 0
+    for (const log of txReceipt.logs || []) {
+        if (!log.address || log.address.toLowerCase() !== contractAddress) {
+            continue
+        }
+        let event
+        try {
+            event = contractInterface.parseLog(log)
+        } catch (error) {
+            return `Unable to parse token contract log ${log.logIndex}: ${error}`
+        }
+        if (event.name !== "Transfer") {
+            continue
+        }
+        if (event.args.from.toLowerCase() !== tx.from.toLowerCase() || event.args.to.toLowerCase() !== ZERO_ADDRESS) {
+            continue
+        }
+        burntValue = burntValue.add(event.args.value)
+        burnLogsCount++
+    }
+    if (burnLogsCount === 0) {
+        return `No burn Transfer logs from ${tx.from} to ${ZERO_ADDRESS}`
+    }
+    if (burntValue.lt(expectedValue)) {
+        return `Wrong value, actual: ${burntValue}, expected: at least ${expectedValue}`
+    }
+    return null
+}
+
+exports.validateBurnTx = async function (txReceipt, txHash, address, amount, date) {
     try {
         const provider = new ethers.providers.JsonRpcProvider(process.env.BSC_RPC, parseInt(process.env.BSC_NETWORK));
         if (!txReceipt) {
@@ -83,23 +151,6 @@ exports.validateBurnTx = async function (txReceipt, txHash, address, amount, dat
             }
         }
 
-        if (txReceipt.status !== 1) {
-            logger.info(`Wrong status, actual: ${txReceipt.status}, expected: 1`);
-            return {}
-        }
-        if (!txReceipt.logs || txReceipt.logs.length === 0) {
-            logger.info(`No logs`);
-            return {}
-        }
-        if (!txReceipt.to) {
-            logger.info(`No recipient`);
-            return {}
-        }
-        if (txReceipt.to.toLowerCase() !== process.env.BSC_CONTRACT.toLowerCase()) {
-            logger.info(`Wrong recipient, actual: ${txReceipt.to}, expected: ${process.env.BSC_CONTRACT}`);
-            return {}
-        }
-
         let tx = await provider.getTransaction(txHash)
         if (!tx) {
             logger.info(`Unable to get tx, hash: ${txHash}`);
@@ -107,33 +158,14 @@ exports.validateBurnTx = async function (txReceipt, txHash, address, amount, dat
                 retry: true
             }
         }
-        let destAddress = extractDestAddress(tx.data)
-        if (destAddress.toLowerCase() !== address.toLowerCase().slice(2)) {
-            logger.info(`Wrong dest address, actual: ${destAddress}, expected: ${address}`);
-            return {}
+        let txError
+        try {
+            txError = getBurnTxError(txReceipt, tx, address, amount)
+        } catch (error) {
+            txError = `Malformed burn tx: ${error}`
         }
-        const contract = new ethers.Contract(
-            process.env.BSC_CONTRACT,
-            abi
-        );
-        const method = contract.interface.parseLog(txReceipt.logs[0]).name
-        if (method !== "Transfer") {
-            logger.info(`Wrong method, actual: ${method}, expected: Transfer`);
-            return {}
-        }
-        const value = contract.interface.parseLog(txReceipt.logs[0]).args.value
-        if (!(value >= ethers.utils.parseEther(amount.toString()))) {
-            logger.info(`Wrong value, actual: ${value}, expected: at least ${amount}`);
-            return {}
-        }
-        const from = contract.interface.parseLog(txReceipt.logs[0]).args.from
-        if (from.toLowerCase() !== tx.from.toLowerCase()) {
-            logger.info(`Wrong sender, actual: ${from}, expected: ${tx.from}`);
-            return {}
-        }
-        const to = contract.interface.parseLog(txReceipt.logs[0]).args.to
-        if (to.toLowerCase() !== "0x0000000000000000000000000000000000000000") {
-            logger.info(`Wrong recipient, actual: ${to}, expected: 0x0000000000000000000000000000000000000000`);
+        if (txError) {
+            logger.info(`Invalid burn tx ${txHash}: ${txError}`);
             return {}
         }
         const block = await provider.getBlock(tx.blockHash)
@@ -172,7 +204,12 @@ exports.getTransactionReceipt = async function (txHash) {
 
 exports.isTxConfirmed = async function (txReceipt) {
     try {
-        return txReceipt && txReceipt.confirmations >= process.env.BSC_CONFIRMATIONS_BLOCKS;
+        const requiredConfirmations = parseInt(process.env.BSC_CONFIRMATIONS_BLOCKS)
+        if (isNaN(requiredConfirmations)) {
+            logger.error(`Invalid BSC_CONFIRMATIONS_BLOCKS: ${process.env.BSC_CONFIRMATIONS_BLOCKS}`);
+            return false
+        }
+        return !!txReceipt && txReceipt.confirmations >= requiredConfirmations;
     } catch (error) {
         logger.error(`Failed to check if tx is confirmed: ${error}`);
         return false
