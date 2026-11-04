@@ -20,7 +20,8 @@
   },
   "devDependencies": {},
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node --test"
   },
   "keywords": [
     "idena",
